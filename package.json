@@ -1,0 +1,31 @@
+{
+  "name": "attendchain",
+  "version": "1.0.0",
+  "description": "AI Face Recognition Attendance System on Hedera Smart Contract Service",
+  "main": "index.js",
+  "scripts": {
+    "compile": "hardhat compile",
+    "test": "hardhat test",
+    "deploy:local": "hardhat run scripts/deploy.js --network localhost",
+    "deploy:hedera": "hardhat run scripts/deploy.js --network hedera_testnet",
+    "check:hedera": "node scripts/check_hedera.js"
+  },
+  "keywords": [
+    "hedera",
+    "solidity",
+    "ai",
+    "face-recognition",
+    "attendance",
+    "smart-contracts"
+  ],
+  "author": "AttendChain Team",
+  "license": "MIT",
+  "devDependencies": {
+    "@nomicfoundation/hardhat-toolbox": "^5.0.0",
+    "dotenv": "^16.4.5",
+    "hardhat": "^2.22.10"
+  },
+  "dependencies": {
+    "@hashgraph/sdk": "^2.81.0"
+  }
+}

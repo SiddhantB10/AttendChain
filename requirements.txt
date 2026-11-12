@@ -1,0 +1,12 @@
+flask>=3.0.0
+flask-cors>=4.0.0
+web3>=7.0.0
+numpy>=1.24.0
+opencv-python>=4.8.0
+mediapipe>=0.10.14
+python-dotenv>=1.0.0
+requests>=2.31.0
+pytest>=8.0.0
+
+pymongo>=4.6.0
+dnspython>=2.4.0

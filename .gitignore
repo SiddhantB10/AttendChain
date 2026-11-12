@@ -1,0 +1,41 @@
+# Environment variables and secrets
+.env
+.env.*
+!.env.example
+
+# Dependencies
+node_modules/
+__pycache__/
+*.py[cod]
+*$py.class
+venv/
+.venv/
+env/
+.pytest_cache/
+
+# Hardhat and build artifacts
+artifacts/
+cache/
+typechain-types/
+deployments/localhost.json
+
+# Databases & local data
+backend/data/*.db
+backend/data/*.sqlite
+backend/data/*.sqlite3
+*.db
+*.sqlite
+*.sqlite3
+
+# AI model weights / large binaries (downloaded automatically if needed)
+backend/models/*.onnx
+backend/models/*.task
+
+# Logs and OS files
+*.log
+.DS_Store
+Thumbs.db
+*.swp
+*.swo
+.vscode/
+.idea/
