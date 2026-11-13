@@ -13,7 +13,7 @@ def test_mongo_student_lifecycle(mongo_db):
     stu = mongo_db.create_student("John Doe", "john@college.edu", "pass123")
     assert stu["name"] == "John Doe"
     assert stu["email"] == "john@college.edu"
-    assert stu["roll_no"].startswith("STU-")
+    assert stu["roll_no"].startswith("AC")
     assert stu["face_enrolled"] == 0
 
     roll = stu["roll_no"]
