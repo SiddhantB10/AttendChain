@@ -812,9 +812,9 @@
   if (quickDemoStudentBtn) {
     quickDemoStudentBtn.addEventListener("click", () => {
       playSound("click");
-      if (unifiedLoginId) unifiedLoginId.value = "STU-250";
-      if (unifiedLoginPass) unifiedLoginPass.value = "student123";
-      handleUnifiedLogin("STU-250", "student123");
+      if (unifiedLoginId) unifiedLoginId.value = "AC001";
+      if (unifiedLoginPass) unifiedLoginPass.value = "siddhant";
+      handleUnifiedLogin("AC001", "siddhant");
     });
   }
 
