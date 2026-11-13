@@ -878,37 +878,80 @@ textarea.text-input-control {
   color: var(--status-present);
 }
 
-/* ----------------- ACADEMIC KPI GRID (ATTENDANCE STATUS) ----------------- */
+/* ----------------- ACADEMIC KPI GRID & SIGNATURE STAT (SCREEN 4) ----------------- */
 .academic-kpi-grid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
-  gap: 18px;
-  margin-bottom: 24px;
+  gap: 20px;
+  margin-bottom: 26px;
 }
 
 .kpi-card {
-  background: var(--bg-surface);
+  background: var(--bg-card);
   border: 1px solid var(--border-subtle);
-  border-radius: var(--radius-lg);
-  box-shadow: var(--shadow-card);
-  padding: 22px;
+  border-radius: var(--radius);
+  box-shadow: var(--elevation-1);
+  padding: 24px;
   display: flex;
   flex-direction: column;
   justify-content: space-between;
-  transition: all var(--transition-fast);
+  perspective: 1000px;
+  transform-style: preserve-3d;
+  transition: transform var(--transition-tilt), box-shadow var(--transition-tilt), border-color var(--transition-tactile);
 }
 
 .kpi-card:hover {
-  border-color: rgba(203, 213, 225, 0.9);
-  box-shadow: var(--shadow-card-hover);
-  transform: translateY(-2px);
+  border-color: var(--navy-500);
+  box-shadow: var(--elevation-2);
+  transform: rotateX(1deg) rotateY(-1deg) translateY(-2px);
+}
+
+/* Signature Depth Moment: Raised 3D Stat Block */
+.kpi-card-signature {
+  background: var(--cream-50);
+  border: 1px solid var(--cream-300);
+  border-radius: var(--radius);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.9), 0 3px 0 var(--cream-300), var(--elevation-2);
+  position: relative;
+  perspective: 1000px;
+  transform-style: preserve-3d;
+  transition: transform var(--transition-tilt), box-shadow var(--transition-tilt), border-color var(--transition-tactile);
+}
+
+.kpi-card-signature:hover {
+  transform: rotateX(1.5deg) rotateY(-1.5deg) translateY(-3px);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 1), 0 4px 0 var(--cream-300), var(--elevation-3);
+  border-color: var(--navy-500);
+}
+
+.signature-stat-ring-wrap {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-top: 8px;
+  gap: 16px;
+}
+
+.signature-stat-ring {
+  width: 52px;
+  height: 52px;
+  border-radius: var(--radius-full);
+  border: 3.5px solid var(--cream-300);
+  border-top-color: var(--coral-500);
+  border-right-color: var(--coral-500);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: inset 0 2px 4px rgba(14, 26, 51, 0.08), 0 2px 4px rgba(14, 26, 51, 0.05);
+  flex-shrink: 0;
+  color: var(--coral-700);
 }
 
 .kpi-title-row {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  color: var(--text-muted);
+  color: var(--navy-500);
   font-size: 0.74rem;
   font-weight: 700;
   text-transform: uppercase;
@@ -916,14 +959,14 @@ textarea.text-input-control {
 }
 
 .kpi-title-row svg {
-  color: var(--text-tertiary);
+  color: var(--navy-500);
 }
 
 .kpi-value-main {
-  font-family: var(--font-display);
-  font-size: 2.3rem;
+  font-family: var(--font-serif);
+  font-size: 2.4rem;
   font-weight: 800;
-  color: var(--text-main);
+  color: var(--navy-900);
   margin: 12px 0 6px;
   line-height: 1;
   font-variant-numeric: tabular-nums;
@@ -932,7 +975,9 @@ textarea.text-input-control {
 
 .kpi-subtext {
   font-size: 0.8rem;
-  color: var(--text-muted);
+  color: var(--navy-500);
+  font-variant-numeric: tabular-nums;
+}
 }
 
 /* ----------------- MY CLASSES GRID & COURSE CARDS (SCREEN 2) ----------------- */
@@ -1387,14 +1432,15 @@ textarea.text-input-control {
   gap: 4px;
 }
 
-/* ----------------- DATA TABLES & GRIDS ----------------- */
+/* ----------------- DATA TABLES & ROSTERS (SCREEN 4) ----------------- */
 .academic-table-wrap,
 .table-container {
   width: 100%;
   overflow-x: auto;
-  border-radius: var(--radius-lg);
+  border-radius: var(--radius);
   border: 1px solid var(--border-subtle);
-  background: #ffffff;
+  background: var(--bg-card);
+  box-shadow: var(--elevation-1);
 }
 
 .official-table,
@@ -1407,12 +1453,13 @@ textarea.text-input-control {
 
 .official-table th,
 .academic-table th {
-  background-color: #f8fafc;
-  color: var(--text-muted);
+  background-color: var(--cream-100);
+  color: var(--navy-700);
+  font-family: var(--font-sans);
   font-weight: 700;
-  font-size: 0.72rem;
+  font-size: 0.74rem;
   text-transform: uppercase;
-  letter-spacing: 0.06em;
+  letter-spacing: 0.05em;
   padding: 12px 18px;
   border-bottom: 1px solid var(--border-subtle);
   white-space: nowrap;
@@ -1421,9 +1468,15 @@ textarea.text-input-control {
 .official-table td,
 .academic-table td {
   padding: 14px 18px;
-  border-bottom: 1px solid #f1f5f9;
-  color: var(--text-main);
+  border-bottom: 1px solid var(--border-subtle);
+  color: var(--navy-900);
   vertical-align: middle;
+  font-variant-numeric: tabular-nums;
+}
+
+.official-table tbody tr:nth-child(even),
+.academic-table tbody tr:nth-child(even) {
+  background-color: rgba(246, 240, 227, 0.45);
 }
 
 .official-table tbody tr:last-child td,
@@ -1433,7 +1486,8 @@ textarea.text-input-control {
 
 .official-table tbody tr:hover,
 .academic-table tbody tr:hover {
-  background-color: #f8fafc;
+  background-color: var(--cream-100);
+  transition: background-color var(--transition-fast);
 }
 
 .badge,
@@ -1442,35 +1496,36 @@ textarea.text-input-control {
   align-items: center;
   gap: 5px;
   padding: 3px 10px;
-  border-radius: var(--radius-full);
+  border-radius: var(--radius);
   font-size: 0.74rem;
   font-weight: 700;
   letter-spacing: 0.01em;
+  font-variant-numeric: tabular-nums;
 }
 
 .badge-success,
 .status-eligible {
-  background-color: var(--accent-success-bg);
-  color: var(--accent-success-text);
-  border: 1px solid var(--accent-success-border);
+  background-color: rgba(47, 125, 91, 0.12);
+  color: var(--status-present);
+  border: 1px solid rgba(47, 125, 91, 0.3);
 }
 
 .badge-danger,
 .status-defaulter {
-  background-color: var(--accent-danger-bg);
-  color: var(--accent-danger-text);
-  border: 1px solid var(--accent-danger-border);
+  background-color: rgba(166, 58, 43, 0.12);
+  color: var(--status-absent);
+  border: 1px solid rgba(166, 58, 43, 0.3);
 }
 
 .status-active {
-  background-color: rgba(37, 99, 235, 0.08);
-  color: var(--primary-600);
-  border: 1px solid rgba(37, 99, 235, 0.25);
+  background-color: rgba(232, 96, 76, 0.12);
+  color: var(--coral-700);
+  border: 1px solid rgba(232, 96, 76, 0.3);
 }
 
 .status-closed {
-  background-color: #f1f5f9;
-  color: var(--text-muted);
+  background-color: var(--cream-100);
+  color: var(--navy-500);
   border: 1px solid var(--border-subtle);
 }
 
@@ -1478,8 +1533,8 @@ textarea.text-input-control {
   width: 100%;
   max-width: 140px;
   height: 6px;
-  background-color: #f1f5f9;
-  border-radius: var(--radius-full);
+  background-color: var(--cream-300);
+  border-radius: var(--radius);
   overflow: hidden;
 }
 
@@ -1890,44 +1945,50 @@ textarea.text-input-control {
   flex-wrap: wrap;
 }
 
-/* ----------------- ADMIN STATS CARDS ----------------- */
+/* ----------------- ADMIN & OVERVIEW STATS (SCREEN 4) ----------------- */
 .admin-stats-grid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
-  gap: 18px;
-  margin-bottom: 24px;
+  gap: 20px;
+  margin-bottom: 26px;
 }
 
 .admin-stat-card {
-  background: #ffffff;
+  background: var(--bg-card);
   border: 1px solid var(--border-subtle);
-  border-radius: var(--radius-lg);
-  padding: 20px;
-  box-shadow: var(--shadow-card);
-  transition: all var(--transition-fast);
+  border-radius: var(--radius);
+  padding: 22px;
+  box-shadow: var(--elevation-1);
+  perspective: 1000px;
+  transform-style: preserve-3d;
+  transition: transform var(--transition-tilt), box-shadow var(--transition-tilt), border-color var(--transition-tactile);
 }
 
 .admin-stat-card:hover {
-  transform: translateY(-2px);
-  box-shadow: var(--shadow-card-hover);
-  border-color: var(--border-medium);
+  transform: rotateX(0.8deg) rotateY(-0.8deg) translateY(-2px);
+  box-shadow: var(--elevation-2);
+  border-color: var(--navy-500);
 }
 
 .admin-stat-label {
+  font-family: var(--font-sans);
   font-size: 0.74rem;
   font-weight: 700;
   text-transform: uppercase;
-  color: var(--text-muted);
+  color: var(--navy-500);
   letter-spacing: 0.05em;
 }
 
 .admin-stat-value {
-  font-family: var(--font-display);
-  font-size: 2.2rem;
+  font-family: var(--font-serif);
+  font-size: 2.3rem;
   font-weight: 800;
-  color: var(--text-main);
-  margin-top: 6px;
+  color: var(--navy-900);
+  margin-top: 8px;
   line-height: 1;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.02em;
+}
 }
 
 /* ----------------- PROFILE & PERSON DETAIL (SCREEN 3) ----------------- */

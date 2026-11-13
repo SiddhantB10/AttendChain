@@ -2486,22 +2486,22 @@
     tbody.innerHTML = groups.map(g => {
       const pct = g.attendance_percent || 0;
       const isDef = g.is_defaulter;
-      const progressColor = isDef ? "var(--accent-danger)" : "var(--accent-success)";
+      const progressColor = isDef ? "var(--status-absent)" : "var(--status-present)";
       const standingBadge = isDef
-        ? `<span class="badge badge-danger">Shortage (< 75%)</span>`
-        : `<span class="badge badge-success">Eligible</span>`;
+        ? `<span class="status-badge-a"><span class="toggle-letter">A</span> Shortage (< 75%)</span>`
+        : `<span class="status-badge-p"><span class="toggle-letter">P</span> Eligible</span>`;
 
       return `
         <tr>
-          <td><strong class="mono-code">${escapeHtml(g.subject_code)}</strong></td>
-          <td style="font-weight:700; color:var(--text-main);">${escapeHtml(g.name)}</td>
-          <td style="color:var(--text-muted);">${escapeHtml(g.faculty_name || 'Course Faculty')}</td>
-          <td>${g.attended_sessions || 0} / ${g.total_sessions || 0}</td>
+          <td><strong class="mono-code" style="font-variant-numeric:tabular-nums;">${escapeHtml(g.subject_code)}</strong></td>
+          <td style="font-weight:700; color:var(--navy-900);">${escapeHtml(g.name)}</td>
+          <td style="color:var(--navy-500);">${escapeHtml(g.faculty_name || 'Course Faculty')}</td>
+          <td style="font-variant-numeric:tabular-nums;">${g.attended_sessions || 0} / ${g.total_sessions || 0}</td>
           <td>
             <div style="display:flex; align-items:center; gap:8px;">
-              <span style="font-weight:700; color:${progressColor}; min-width:38px;">${pct}%</span>
-              <div style="flex:1; max-width:90px; height:6px; background:var(--bg-subtle); border-radius:3px; overflow:hidden;">
-                <div style="width:${Math.min(100, pct)}%; height:100%; background:${progressColor};"></div>
+              <span style="font-weight:700; color:${progressColor}; min-width:38px; font-variant-numeric:tabular-nums;">${pct}%</span>
+              <div style="flex:1; max-width:90px; height:6px; background:var(--cream-300); border-radius:var(--radius); overflow:hidden;">
+                <div style="width:${Math.min(100, pct)}%; height:100%; background:${progressColor}; border-radius:var(--radius);"></div>
               </div>
             </div>
           </td>
@@ -2518,7 +2518,7 @@
     if (!records || records.length === 0) {
       tbody.innerHTML = `
         <tr>
-          <td colspan="6" style="text-align:center; color:var(--text-muted); padding:30px;">
+          <td colspan="6" style="text-align:center; color:var(--navy-500); padding:30px;">
             No attendance records yet. Once you attend a lecture, verified ledger receipts will appear here.
           </td>
         </tr>
@@ -2533,12 +2533,12 @@
 
       return `
         <tr>
-          <td style="white-space:nowrap; font-size:0.84rem;">${dateStr}</td>
-          <td style="font-weight:700; color:var(--text-main);">${escapeHtml(courseName)}</td>
-          <td><span class="mono-code">#${r.session_id}</span></td>
-          <td><span style="color:#059669; font-weight:700; font-size:0.82rem;">Liveness Verified (Blink)</span></td>
+          <td style="white-space:nowrap; font-size:0.84rem; font-variant-numeric:tabular-nums;">${dateStr}</td>
+          <td style="font-weight:700; color:var(--navy-900);">${escapeHtml(courseName)}</td>
+          <td><span class="mono-code" style="font-variant-numeric:tabular-nums;">#${r.session_id}</span></td>
+          <td><span style="color:var(--status-present); font-weight:700; font-size:0.82rem;">Liveness Verified</span></td>
           <td><code class="mono-code" title="${escapeHtml(r.evidence_hash)}">${hashShort}</code></td>
-          <td><span class="badge badge-success" style="font-size:0.75rem;">Hedera Anchored</span></td>
+          <td><span class="status-badge-p" style="font-size:0.75rem;"><span class="toggle-letter">P</span> Anchored</span></td>
         </tr>
       `;
     }).join("");
@@ -3468,11 +3468,11 @@
         if (facTbody && data.faculties) {
           facTbody.innerHTML = data.faculties.map(f => `
             <tr>
-              <td style="font-weight:700;">${escapeHtml(f.name)}</td>
-              <td style="font-family:var(--font-mono);">${escapeHtml(f.email)}</td>
+              <td style="font-weight:700; color:var(--navy-900);">${escapeHtml(f.name)}</td>
+              <td style="font-family:var(--font-mono); color:var(--navy-700);">${escapeHtml(f.email)}</td>
               <td>${escapeHtml(f.department || 'Engineering')}</td>
-              <td><strong>${f.total_groups || 0}</strong> Groups</td>
-              <td><span class="badge badge-success">Active Faculty</span></td>
+              <td style="font-variant-numeric:tabular-nums;"><strong>${f.total_groups || 0}</strong> Groups</td>
+              <td><span class="status-badge-p"><span class="toggle-letter">P</span> Active</span></td>
             </tr>
           `).join("");
         }
@@ -3482,12 +3482,12 @@
         if (grpTbody && data.groups) {
           grpTbody.innerHTML = data.groups.map(g => `
             <tr>
-              <td style="font-weight:700; font-family:var(--font-mono); color:var(--primary-blue);">${escapeHtml(g.subject_code)}</td>
-              <td style="font-weight:600;">${escapeHtml(g.name)}</td>
+              <td style="font-weight:700; font-family:var(--font-mono); color:var(--coral-700); font-variant-numeric:tabular-nums;">${escapeHtml(g.subject_code)}</td>
+              <td style="font-weight:600; color:var(--navy-900);">${escapeHtml(g.name)}</td>
               <td>${escapeHtml(g.department || 'Engineering')}</td>
               <td>${escapeHtml(g.faculty_name || g.faculty_email)}</td>
-              <td><code>${escapeHtml(g.invite_code)}</code></td>
-              <td><strong>${g.enrolled_count || 0}</strong> Students</td>
+              <td><code class="mono-code" style="font-variant-numeric:tabular-nums;">${escapeHtml(g.invite_code)}</code></td>
+              <td style="font-variant-numeric:tabular-nums;"><strong>${g.enrolled_count || 0}</strong> Students</td>
             </tr>
           `).join("");
         }

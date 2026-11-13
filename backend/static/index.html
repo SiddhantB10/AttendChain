@@ -329,14 +329,21 @@
 
         <!-- 4 Academic KPI Summary Cards -->
         <div class="academic-kpi-grid">
-          <div class="kpi-card">
+          <div class="kpi-card kpi-card-signature">
             <div class="kpi-title-row">
               <span>Overall Attendance Rate</span>
               <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                 <path d="M18 20V10M12 20V4M6 20v-6"/>
               </svg>
             </div>
-            <div class="kpi-value-main" id="metricAttendancePct">100%</div>
+            <div class="signature-stat-ring-wrap">
+              <div class="kpi-value-main" id="metricAttendancePct">100%</div>
+              <div class="signature-stat-ring" title="Verified Attendance Standing">
+                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+                  <polyline points="20 6 9 17 4 12"></polyline>
+                </svg>
+              </div>
+            </div>
             <div class="kpi-subtext">Minimum Requirement: ≥ 75%</div>
           </div>
 
@@ -776,7 +783,7 @@
               </p>
             </div>
             <div style="display:flex; gap:10px; align-items:center;">
-              <button id="openAddFacultyModalBtn" class="btn-primary-action" type="button" style="width:auto; padding:0 18px; background:#7e22ce;">
+              <button id="openAddFacultyModalBtn" class="btn-primary-action" type="button" style="width:auto; padding:0 18px;">
                 <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
                   <line x1="12" y1="5" x2="12" y2="19"></line>
                   <line x1="5" y1="12" x2="19" y2="12"></line>
@@ -795,22 +802,22 @@
           <div class="admin-stat-card">
             <div class="admin-stat-label">Total Faculty & Staff</div>
             <div class="admin-stat-value" id="superAdminFacCount">2</div>
-            <div style="font-size:0.78rem; color:var(--text-muted); margin-top:4px;">Registered Instructors</div>
+            <div style="font-size:0.78rem; color:var(--navy-500); margin-top:4px;">Registered Instructors</div>
           </div>
           <div class="admin-stat-card">
             <div class="admin-stat-label">Subject Course Groups</div>
-            <div class="admin-stat-value" id="superAdminGroupCount" style="color:var(--primary-blue);">3</div>
-            <div style="font-size:0.78rem; color:var(--text-muted); margin-top:4px;">Across all departments</div>
+            <div class="admin-stat-value" id="superAdminGroupCount" style="color:var(--navy-700);">3</div>
+            <div style="font-size:0.78rem; color:var(--navy-500); margin-top:4px;">Across all departments</div>
           </div>
           <div class="admin-stat-card">
             <div class="admin-stat-label">Registered Students</div>
-            <div class="admin-stat-value" id="superAdminStudentCount" style="color:var(--accent-success);">3</div>
-            <div style="font-size:0.78rem; color:var(--text-muted); margin-top:4px;">Biometrically enrolled</div>
+            <div class="admin-stat-value" id="superAdminStudentCount" style="color:var(--status-present);">3</div>
+            <div style="font-size:0.78rem; color:var(--navy-500); margin-top:4px;">Biometrically enrolled</div>
           </div>
           <div class="admin-stat-card">
             <div class="admin-stat-label">Hedera Transactions</div>
-            <div class="admin-stat-value" id="superAdminTxCount" style="color:#7e22ce;">3</div>
-            <div style="font-size:0.78rem; color:var(--text-muted); margin-top:4px;">Immutable receipts on SCS</div>
+            <div class="admin-stat-value" id="superAdminTxCount" style="color:var(--coral-700);">3</div>
+            <div style="font-size:0.78rem; color:var(--navy-500); margin-top:4px;">Immutable receipts on SCS</div>
           </div>
         </div>
 
