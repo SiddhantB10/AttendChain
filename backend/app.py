@@ -1219,21 +1219,20 @@ def create_app(chain_adapter=None, face_engine=None, db=None, auto_init_session:
         except ValueError:
             return jsonify({"verdict": "invalid_session", "error": "session_id must be integer."}), 404
 
-        # Pre-check session validity and active status locally first for fast responsiveness
+        # Pre-check session validity and active status: check both DB and chain
         sess = app.db.get_session(session_id)
         now_ts = int(time.time())
-        if sess:
-            if sess.get("closed") == 1 or sess.get("end_time", 0) <= now_ts:
-                return jsonify({
-                    "verdict": "session_inactive",
-                    "error": f"Session #{session_id} has closed or expired. Please ask your faculty to take attendance."
-                }), 400
-        else:
-            if not app.chain.is_session_active(session_id):
-                return jsonify({
-                    "verdict": "session_inactive",
-                    "error": f"Session #{session_id} has closed or expired. Please ask your faculty to take attendance."
-                }), 400
+        if sess and (sess.get("closed") == 1 or sess.get("end_time", 0) <= now_ts):
+            return jsonify({
+                "verdict": "session_inactive",
+                "error": f"Session #{session_id} has closed or expired. Please ask your faculty to take attendance."
+            }), 400
+
+        if not app.chain.is_session_active(session_id):
+            return jsonify({
+                "verdict": "session_inactive",
+                "error": f"Session #{session_id} has closed or expired. Please ask your faculty to take attendance."
+            }), 400
 
         # Retrieve enrolled templates
         enrolled = app.db.get_all_embeddings()
