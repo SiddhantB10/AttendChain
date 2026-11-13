@@ -100,6 +100,29 @@
     return `${str.substring(0, chars + 2)}...${str.substring(str.length - chars)}`;
   }
 
+  function getExplorerTxUrl(hash) {
+    if (!hash) return "";
+    const clean = String(hash).trim();
+    if (!clean || clean === "0x" || clean === "0x0" || clean === "None") return "";
+    return `https://hashscan.io/testnet/transaction/${clean}`;
+  }
+
+  function getExplorerContractUrl(addr) {
+    if (!addr) return "";
+    const clean = String(addr).trim();
+    return `https://hashscan.io/testnet/contract/${clean}`;
+  }
+
+  function formatHashLink(hash, chars = 8, label = "") {
+    if (!hash || hash === "0x" || hash === "0x0" || hash === "None") {
+      return `<span class="mono-code" style="color:var(--navy-500); opacity:0.6;">—</span>`;
+    }
+    const clean = String(hash).trim();
+    const url = getExplorerTxUrl(clean);
+    const text = label || shorten(clean, chars);
+    return `<a href="${url}" target="_blank" rel="noopener noreferrer" class="blockchain-hash-link" title="Open transaction in HashScan (${escapeHtml(clean)})"><span>${escapeHtml(text)}</span><span class="hash-ext-icon">↗</span></a>`;
+  }
+
   function getAdminToken() {
     return sessionStorage.getItem("attendchain_admin_token") || "attendchain-admin-secret-change-me";
   }
@@ -204,7 +227,7 @@
   }
 
   // --- Sleek Non-Blocking Toast Notification System ---
-  function showToast(message, type = "info") {
+  function showToast(message, type = "info", txHash = "") {
     let container = document.getElementById("attendToastContainer");
     if (!container) {
       container = document.createElement("div");
@@ -225,10 +248,15 @@
       iconSvg = `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>`;
     }
 
+    const hashLinkHtml = txHash ? `<div style="margin-top:6px; font-size:0.78rem;">${formatHashLink(txHash, 8)}</div>` : "";
+
     toast.innerHTML = `
-      <div style="display:flex; align-items:center; gap:8px;">
-        ${iconSvg}
-        <span>${escapeHtml(message)}</span>
+      <div style="display:flex; align-items:flex-start; gap:10px; width:100%;">
+        <div style="margin-top:2px;">${iconSvg}</div>
+        <div style="flex:1;">
+          <div style="font-weight:600; line-height:1.35;">${message}</div>
+          ${hashLinkHtml}
+        </div>
       </div>
     `;
 
@@ -238,7 +266,7 @@
       toast.style.opacity = "0";
       toast.style.transform = "translateX(20px)";
       setTimeout(() => toast.remove(), 260);
-    }, 3200);
+    }, 4500);
   }
 
   // --- Real-Time Cross-Tab & Dashboard Live Sync (Instant Inter-Tab Broadcast) ---
@@ -1563,9 +1591,9 @@
           <div><strong>Liveness Verification:</strong> ${rec.blink_count} Blink(s) Verified ✓</div>
         </div>
 
-        <div style="margin-top:12px; padding-top:10px; border-top:1px solid rgba(5,150,105,0.25); display:flex; justify-content:space-between; align-items:center; font-size:0.82rem;">
-          <span>On-Chain Evidence Hash: <code class="mono-code">${shorten(rec.tx_hash, 8)}</code></span>
-          <a href="${rec.explorer_url}" target="_blank" class="link-btn" style="color:var(--primary-blue);">
+        <div style="margin-top:12px; padding-top:10px; border-top:1px solid rgba(47,125,91,0.25); display:flex; justify-content:space-between; align-items:center; font-size:0.82rem; flex-wrap:wrap; gap:8px;">
+          <span>On-Chain Evidence Hash: ${formatHashLink(rec.tx_hash, 8)}</span>
+          <a href="${rec.explorer_url || getExplorerTxUrl(rec.tx_hash)}" target="_blank" rel="noopener noreferrer" class="link-btn" style="color:var(--coral-700); font-weight:700;">
             View HashScan Audit Record ↗
           </a>
         </div>
@@ -2067,7 +2095,7 @@
 
         return `
           <tr>
-            <td><strong>#${s.session_id}</strong></td>
+            <td><strong>#${s.session_id}</strong> ${s.tx_hash ? formatHashLink(s.tx_hash, 6) : ''}</td>
             <td><strong>${escapeHtml(s.subject)}</strong></td>
             <td>${mins} mins</td>
             <td>${stateBadge}</td>
@@ -2123,8 +2151,8 @@
           <tr>
             <td><strong>${escapeHtml(st.roll_no)}</strong></td>
             <td>${escapeHtml(st.name)}</td>
-            <td class="mono-text">${shorten(st.student_id, 8)}</td>
-            <td class="mono-text">${shorten(st.face_commitment, 8)}</td>
+            <td>${formatHashLink(st.student_id, 8)}</td>
+            <td>${formatHashLink(st.face_commitment, 8)}</td>
             <td class="text-muted">${dateStr}</td>
           </tr>
         `;
@@ -2529,7 +2557,8 @@
     tbody.innerHTML = records.map(r => {
       const dateStr = r.timestamp ? new Date(r.timestamp * 1000).toLocaleString() : "Recent Session";
       const courseName = r.subject_code ? `${r.subject_code} — ${r.group_name || 'Course'}` : (r.group_name || 'Classroom Session');
-      const hashShort = r.evidence_hash ? shorten(r.evidence_hash, 8) : "0x...";
+      const targetHash = r.tx_hash || r.evidence_hash;
+      const hashUrl = r.explorer_url || getExplorerTxUrl(targetHash);
 
       return `
         <tr>
@@ -2537,8 +2566,12 @@
           <td style="font-weight:700; color:var(--navy-900);">${escapeHtml(courseName)}</td>
           <td><span class="mono-code" style="font-variant-numeric:tabular-nums;">#${r.session_id}</span></td>
           <td><span style="color:var(--status-present); font-weight:700; font-size:0.82rem;">Liveness Verified</span></td>
-          <td><code class="mono-code" title="${escapeHtml(r.evidence_hash)}">${hashShort}</code></td>
-          <td><span class="status-badge-p" style="font-size:0.75rem;"><span class="toggle-letter">P</span> Anchored</span></td>
+          <td>${formatHashLink(targetHash, 8)}</td>
+          <td>
+            <a href="${hashUrl || 'https://hashscan.io/testnet'}" target="_blank" rel="noopener noreferrer" class="status-badge-p" style="font-size:0.75rem; text-decoration:none; display:inline-flex; align-items:center; gap:4px;" title="View verified ledger receipt on HashScan">
+              <span class="toggle-letter">P</span> Anchored ↗
+            </a>
+          </td>
         </tr>
       `;
     }).join("");
@@ -3092,26 +3125,33 @@
       if (ok && data.verdict === "ok") {
         playSound("success");
         const rec = data.record;
+        const txUrl = rec.explorer_url || getExplorerTxUrl(rec.tx_hash);
         modalScanResultContainer.innerHTML = `
           <div class="verdict-banner-official success" style="margin-top:14px;">
             <div class="verdict-header-row">
               <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"></polyline></svg>
               <div>
                 <div style="font-size:1.05rem; font-weight:700;">Attendance Recorded: PRESENT ✓</div>
-                <div style="font-size:0.82rem; opacity:0.9;">Committed to Hedera SCS Blockchain • Tx: ${shorten(rec.tx_hash, 12)}</div>
+                <div style="font-size:0.82rem; opacity:0.95; margin-top:3px;">
+                  Committed to Hedera SCS Blockchain • Tx: <a href="${txUrl}" target="_blank" rel="noopener noreferrer" style="color:#ffffff; font-weight:700; text-decoration:underline; font-family:var(--font-mono);">${shorten(rec.tx_hash, 10)} ↗</a>
+                </div>
               </div>
             </div>
-            <div style="margin-top:10px; font-size:0.84rem; display:flex; gap:16px;">
+            <div style="margin-top:12px; font-size:0.84rem; display:flex; gap:16px; align-items:center; flex-wrap:wrap;">
               <div><strong>Match Score:</strong> ${Math.round(rec.match_score * 100)}%</div>
               <div><strong>Blinks:</strong> ${rec.blink_count}</div>
-              <div><a href="${rec.explorer_url}" target="_blank" style="color:#ffffff; text-decoration:underline;">View on HashScan →</a></div>
+              <div>
+                <a href="${txUrl}" target="_blank" rel="noopener noreferrer" style="color:#ffffff; font-weight:700; text-decoration:underline; display:inline-flex; align-items:center; gap:4px;">
+                  View on HashScan Explorer ↗
+                </a>
+              </div>
             </div>
           </div>
         `;
         modalIsCapturing = false;
         if (currentStudentData) loadStudentDashboard(currentStudentData.roll_no);
         notifySessionSync(modalScanSessionId);
-        showToast("Attendance Marked: PRESENT ✓ Committed to Blockchain", "success");
+        showToast("Attendance Marked: PRESENT ✓ Committed to Blockchain", "success", rec.tx_hash);
       } else {
         playSound("error");
         modalIsCapturing = false;
@@ -3283,7 +3323,7 @@
 
           if (ok && data.ok) {
             playSound("success");
-            showToast(`Attendance window opened for ${groupName} (${dur}m)! Students can now scan face.`, "success");
+            showToast(`Attendance window opened for ${groupName} (${dur}m)!`, "success", (data.session && data.session.tx_hash) || data.tx_hash || "");
             loadFacultyConsole();
             loadActiveSessions();
             notifySessionSync(groupId);
@@ -3602,7 +3642,14 @@
           const dateStr = stu.registered_at ? new Date(stu.registered_at * 1000).toLocaleDateString() : "Registered";
           regDateEl.textContent = dateStr;
         }
-        if (idHashEl) idHashEl.textContent = stu.student_id ? shorten(stu.student_id, 12) : "0x...";
+        if (idHashEl) {
+          const idTarget = stu.tx_hash || stu.student_id;
+          if (idTarget) {
+            idHashEl.innerHTML = formatHashLink(idTarget, 12);
+          } else {
+            idHashEl.textContent = "0x...";
+          }
+        }
 
         renderProfileFaceIdCard(stu);
       }
@@ -3638,8 +3685,17 @@
         <p style="font-size:0.86rem; color:var(--navy-500); margin-bottom:14px; line-height:1.45;">
           Your biometric face template is cryptographically protected and securely anchored to the Hedera Smart Contract Service.
         </p>
-        <div style="background:var(--cream-100); border:1px solid var(--cream-300); padding:10px 14px; border-radius:var(--radius); font-size:0.82rem; margin-bottom:14px; font-family:var(--font-mono); color:var(--navy-900);">
-          Commitment: ${shorten(stu.face_commitment, 12)}
+        <div style="background:var(--cream-100); border:1px solid var(--cream-300); padding:10px 14px; border-radius:var(--radius); font-size:0.82rem; margin-bottom:14px; color:var(--navy-900);">
+          <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:6px;">
+            <span style="font-size:0.78rem; color:var(--navy-500); font-weight:600;">Biometric Commitment:</span>
+            ${formatHashLink(stu.face_commitment, 10)}
+          </div>
+          ${stu.tx_hash ? `
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-top:8px; padding-top:8px; border-top:1px dashed var(--cream-300); flex-wrap:wrap; gap:6px;">
+              <span style="font-size:0.78rem; color:var(--navy-500); font-weight:600;">Hedera Registration Tx:</span>
+              ${formatHashLink(stu.tx_hash, 10)}
+            </div>
+          ` : ''}
         </div>
         <button class="btn-secondary-action" type="button" disabled style="width:100%; margin-bottom:12px; cursor:not-allowed; opacity:0.85; display:flex; align-items:center; justify-content:center; gap:8px;">
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect><path d="M7 11V7a5 5 0 0 1 10 0v4"></path></svg>
@@ -3795,10 +3851,13 @@
       playSound("success");
       if (enrollResultContainer) {
         enrollResultContainer.innerHTML = `
-          <div style="background:rgba(16,185,129,0.15); border:1px solid #10b981; border-radius:var(--radius-md); padding:16px; color:#059669; font-weight:700; text-align:center;">
-            <div style="font-size:1.2rem; margin-bottom:4px;">✓ Face ID Enrolled Successfully!</div>
-            <div style="font-size:0.84rem; font-weight:500; color:var(--text-main);">Cryptographic commitment anchored to Hedera Distributed Ledger.</div>
-            <div style="font-size:0.78rem; font-family:var(--font-mono); margin-top:6px; color:var(--text-muted);">Tx: ${shorten(data.tx_hash, 12)}</div>
+          <div style="background:rgba(47,125,91,0.12); border:1px solid rgba(47,125,91,0.3); border-radius:var(--radius); padding:16px; color:var(--status-present); font-weight:700; text-align:center;">
+            <div style="font-size:1.15rem; margin-bottom:4px; font-family:var(--font-serif);">✓ Face ID Enrolled Successfully!</div>
+            <div style="font-size:0.84rem; font-weight:500; color:var(--navy-900);">Cryptographic commitment anchored to Hedera Distributed Ledger.</div>
+            <div style="margin-top:10px; font-size:0.82rem; display:flex; justify-content:center; align-items:center; gap:8px;">
+              <span style="color:var(--navy-500); font-size:0.8rem;">On-Chain Tx:</span>
+              ${formatHashLink(data.tx_hash, 12)}
+            </div>
           </div>
         `;
       }
@@ -3806,6 +3865,7 @@
       currentStudentData.face_enrolled = 1;
       currentStudentData.face_reset_status = "NONE";
       sessionStorage.setItem("attendchain_student_data", JSON.stringify(currentStudentData));
+      showToast("Biometric Face ID Enrolled & Anchored to Hedera Ledger!", "success", data.tx_hash);
 
       setTimeout(() => {
         closeFaceEnrollModal();

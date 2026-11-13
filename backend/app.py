@@ -714,6 +714,12 @@ def create_app(chain_adapter=None, face_engine=None, db=None, auto_init_session:
         ]
 
         attendance_history = app.db.get_attendance_records_for_student(student_id)
+        augmented_history = []
+        for r in attendance_history:
+            r_dict = dict(r)
+            tx = r_dict.get("tx_hash") or r_dict.get("evidence_hash") or ""
+            r_dict["explorer_url"] = app.chain.get_explorer_tx_url(tx) if tx else ""
+            augmented_history.append(r_dict)
 
         return jsonify({
             "student": {
@@ -725,7 +731,9 @@ def create_app(chain_adapter=None, face_engine=None, db=None, auto_init_session:
                 "face_enrolled": bool(student.get("face_enrolled", 0)),
                 "face_reset_status": student.get("face_reset_status", "NONE"),
                 "face_reset_reason": student.get("face_reset_reason", ""),
-                "registered_at": student["registered_at"]
+                "registered_at": student["registered_at"],
+                "tx_hash": student.get("tx_hash", ""),
+                "explorer_url": app.chain.get_explorer_tx_url(student.get("tx_hash", "")) if student.get("tx_hash") else ""
             },
             "overall_stats": {
                 "total_groups": len(joined_groups),
@@ -736,7 +744,7 @@ def create_app(chain_adapter=None, face_engine=None, db=None, auto_init_session:
             },
             "joined_groups": joined_groups,
             "active_attendance_sessions": active_attendance_sessions,
-            "attendance_history": attendance_history
+            "attendance_history": augmented_history
         }), 200
 
     @app.route("/api/student/join-group", methods=["POST"])
@@ -811,7 +819,9 @@ def create_app(chain_adapter=None, face_engine=None, db=None, auto_init_session:
             "face_enrolled": bool(student.get("face_enrolled", 0)),
             "face_reset_status": student.get("face_reset_status", "NONE"),
             "face_reset_reason": student.get("face_reset_reason", ""),
-            "registered_at": student["registered_at"]
+            "registered_at": student["registered_at"],
+            "tx_hash": student.get("tx_hash", ""),
+            "explorer_url": app.chain.get_explorer_tx_url(student.get("tx_hash", "")) if student.get("tx_hash") else ""
         }
         return jsonify({
             "ok": True,

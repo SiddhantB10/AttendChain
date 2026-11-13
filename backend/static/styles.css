@@ -909,6 +909,48 @@ textarea.text-input-control {
   color: var(--navy-900);
 }
 
+/* Blockchain Hash Embedded Link */
+.blockchain-hash-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-family: var(--font-mono);
+  font-size: 0.8rem;
+  font-weight: 700;
+  color: var(--coral-700);
+  background-color: var(--cream-100);
+  border: 1px solid var(--cream-300);
+  padding: 2px 7px;
+  border-radius: var(--radius);
+  text-decoration: none;
+  font-variant-numeric: tabular-nums;
+  cursor: pointer;
+  transition: all var(--transition-tactile);
+}
+
+.blockchain-hash-link:hover {
+  background-color: var(--navy-900);
+  color: var(--cream-50);
+  border-color: var(--navy-700);
+  transform: translateY(-1px);
+  box-shadow: 0 2px 4px rgba(14, 26, 51, 0.12);
+}
+
+.blockchain-hash-link:active {
+  transform: translateY(1px);
+}
+
+.blockchain-hash-link .hash-ext-icon {
+  font-size: 0.72rem;
+  opacity: 0.8;
+  transition: transform var(--transition-tactile);
+}
+
+.blockchain-hash-link:hover .hash-ext-icon {
+  transform: translate(1px, -1px);
+  opacity: 1;
+}
+
 /* Alert Callouts */
 .alert-callout-box {
   padding: 12px 16px;
