@@ -3622,10 +3622,10 @@
       // State 1: Unregistered Face ID
       wrap.innerHTML = `
         <div class="face-status-badge unenrolled" style="margin-bottom:12px;">Biometric Face ID Not Enrolled</div>
-        <p style="font-size:0.86rem; color:var(--text-muted); margin-bottom:16px; line-height:1.45;">
+        <p style="font-size:0.86rem; color:var(--navy-500); margin-bottom:16px; line-height:1.45;">
           You have not enrolled your biometric Face ID yet. In accordance with university attendance regulations, you must capture and register your facial template once to unlock classroom attendance verification.
         </p>
-        <button id="profileEnrollFaceBtn" class="btn-primary-action" type="button" style="background:#059669; width:100%; display:flex; align-items:center; justify-content:center; gap:8px;">
+        <button id="profileEnrollFaceBtn" class="btn-primary-action" type="button" style="width:100%; display:flex; align-items:center; justify-content:center; gap:8px;">
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg>
           <span>Enroll Biometric Face ID Now</span>
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><line x1="5" y1="12" x2="19" y2="12"></line><polyline points="12 5 19 12 12 19"></polyline></svg>
@@ -3634,11 +3634,11 @@
     } else if (isEnrolled && resetStatus !== "APPROVED" && resetStatus !== "PENDING") {
       // State 2: Enrolled & Locked
       wrap.innerHTML = `
-        <div class="face-status-badge enrolled" style="margin-bottom:12px;">Face ID Active & Anchored on Hedera Blockchain</div>
-        <p style="font-size:0.86rem; color:var(--text-muted); margin-bottom:14px; line-height:1.45;">
+        <div class="face-status-badge enrolled" style="margin-bottom:12px;">Face ID Active & Anchored on Hedera SCS</div>
+        <p style="font-size:0.86rem; color:var(--navy-500); margin-bottom:14px; line-height:1.45;">
           Your biometric face template is cryptographically protected and securely anchored to the Hedera Smart Contract Service.
         </p>
-        <div style="background:var(--bg-subtle); padding:10px 14px; border-radius:var(--radius-md); font-size:0.82rem; margin-bottom:14px; font-family:var(--font-mono); color:var(--text-main);">
+        <div style="background:var(--cream-100); border:1px solid var(--cream-300); padding:10px 14px; border-radius:var(--radius); font-size:0.82rem; margin-bottom:14px; font-family:var(--font-mono); color:var(--navy-900);">
           Commitment: ${shorten(stu.face_commitment, 12)}
         </div>
         <button class="btn-secondary-action" type="button" disabled style="width:100%; margin-bottom:12px; cursor:not-allowed; opacity:0.85; display:flex; align-items:center; justify-content:center; gap:8px;">
@@ -3646,7 +3646,7 @@
           <span>Face ID Registered (Locked)</span>
         </button>
         <div style="text-align:center;">
-          <button id="profileRequestResetBtn" class="link-btn" type="button" style="color:var(--primary-blue); font-weight:700; font-size:0.86rem;">
+          <button id="profileRequestResetBtn" class="link-btn" type="button" style="color:var(--coral-700); font-weight:700; font-size:0.86rem;">
             Request Face ID Reset from Administrator →
           </button>
         </div>
@@ -3655,12 +3655,12 @@
       // State 3: Reset Request Pending Admin Approval
       wrap.innerHTML = `
         <div class="face-status-badge pending" style="margin-bottom:12px;">Face ID Reset Request Pending</div>
-        <p style="font-size:0.86rem; color:var(--text-muted); margin-bottom:12px; line-height:1.45;">
+        <p style="font-size:0.86rem; color:var(--navy-500); margin-bottom:12px; line-height:1.45;">
           Your request to reset your biometric template has been submitted to the Central University Administration for security review.
         </p>
-        <div style="background:var(--bg-subtle); border:1px solid var(--border-subtle); border-radius:var(--radius-md); padding:12px; font-size:0.82rem; margin-bottom:16px;">
-          <strong style="color:var(--text-main);">Submitted Reason:</strong>
-          <div style="color:var(--text-muted); margin-top:2px;">${escapeHtml(stu.face_reset_reason || 'Biometric update requested')}</div>
+        <div style="background:var(--cream-100); border:1px solid var(--cream-300); border-radius:var(--radius); padding:12px; font-size:0.82rem; margin-bottom:16px;">
+          <strong style="color:var(--navy-900);">Submitted Reason:</strong>
+          <div style="color:var(--navy-500); margin-top:2px;">${escapeHtml(stu.face_reset_reason || 'Biometric update requested')}</div>
         </div>
         <button class="btn-secondary-action" type="button" disabled style="width:100%; cursor:not-allowed; opacity:0.75;">
           Reset Request Under Review
@@ -3670,10 +3670,10 @@
       // State 4: Reset Approved by Admin!
       wrap.innerHTML = `
         <div class="face-status-badge approved" style="margin-bottom:12px;">Face ID Reset Approved by Admin</div>
-        <p style="font-size:0.86rem; color:var(--text-muted); margin-bottom:16px; line-height:1.45;">
+        <p style="font-size:0.86rem; color:var(--navy-500); margin-bottom:16px; line-height:1.45;">
           The university administrator has verified and approved your reset request. Your previous biometric template has been unlocked. Please capture your new Face ID now.
         </p>
-        <button id="profileReEnrollFaceBtn" class="btn-primary-action" type="button" style="background:#059669; width:100%; display:flex; align-items:center; justify-content:center; gap:8px;">
+        <button id="profileReEnrollFaceBtn" class="btn-primary-action" type="button" style="width:100%; display:flex; align-items:center; justify-content:center; gap:8px;">
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg>
           <span>Enroll New Face ID Now</span>
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><line x1="5" y1="12" x2="19" y2="12"></line><polyline points="12 5 19 12 12 19"></polyline></svg>
