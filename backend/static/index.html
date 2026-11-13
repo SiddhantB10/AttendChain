@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>AttendChain™ ERP — University Biometric Academic Registry</title>
-  <link rel="stylesheet" href="/styles.css?v=20261113_10">
+  <link rel="stylesheet" href="/styles.css?v=20261113_11">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=Plus+Jakarta+Sans:wght@500;600;700;800&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
@@ -1161,6 +1161,13 @@
           <canvas id="modalScanHudCanvas" class="hud-canvas" width="480" height="360"></canvas>
           <canvas id="modalScanHiddenCanvas" class="hidden-canvas" width="480" height="360"></canvas>
           
+          <!-- Viewport HUD Chips (Faces, Size, Blink Liveness) -->
+          <div class="kiosk-hud-topbar" id="modalHudTopbar">
+            <span class="hud-chip" id="modalHudFacesChip">Faces: 0</span>
+            <span class="hud-chip" id="modalHudDistanceChip">Align Face</span>
+            <span class="hud-chip" id="modalHudBlinkChip">Blink Liveness: Active</span>
+          </div>
+
           <div id="modalScanBlinkPrompt" class="blink-instruction-overlay hidden">
             <div class="blink-dot"></div>
             <span>Please Blink Once Naturally</span>
@@ -1174,6 +1181,20 @@
             <h4 style="font-size:1.05rem; font-weight:700;">Camera Ready</h4>
             <p style="color:#94a3b8; font-size:0.84rem; margin-top:4px;">Position your face inside the framing brackets.</p>
           </div>
+        </div>
+
+        <!-- Controls Bar Below Viewfinder -->
+        <div class="kiosk-controls-bar" style="margin-bottom: 16px;">
+          <button id="modalPauseCamBtn" class="btn-secondary-action" type="button" style="flex: 1;">
+            Pause Camera
+          </button>
+          <button id="triggerModalScanBtn" class="btn-primary-action" type="button" style="flex: 1.5;">
+            <span>Mark Attendance Now</span>
+          </button>
+          <label style="display:flex; align-items:center; gap:8px; font-size:0.84rem; font-weight:600; cursor:pointer; user-select:none; white-space:nowrap;">
+            <input type="checkbox" id="modalAutoMarkToggle">
+            <span>Auto-Detect</span>
+          </label>
         </div>
 
         <!-- Burst capture progress -->
@@ -1192,11 +1213,8 @@
       </div>
 
       <div class="modal-dialog-footer">
-        <button id="cancelFaceScanBtn" class="btn-secondary-action" type="button" style="width:auto; padding:0 18px;">
-          Cancel
-        </button>
-        <button id="triggerModalScanBtn" class="btn-primary-action" type="button" style="width:auto; padding:0 24px;">
-          <span>Scan Face & Submit Attendance</span>
+        <button id="cancelFaceScanBtn" class="btn-secondary-action" type="button" style="width:auto; padding:0 20px;">
+          Close
         </button>
       </div>
     </div>
@@ -1430,6 +1448,6 @@
   </div>
 
   <!-- Main Application Logic (Placed at end of body so all modals are in DOM) -->
-  <script src="/app.js?v=20261113_10"></script>
+  <script src="/app.js?v=20261113_11"></script>
 </body>
 </html>

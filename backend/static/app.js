@@ -2450,6 +2450,24 @@
   const closeFaceScanModalBtn = document.getElementById("closeFaceScanModalBtn");
   const cancelFaceScanBtn = document.getElementById("cancelFaceScanBtn");
   const modalCourseTitle = document.getElementById("modalCourseTitle");
+  const modalHudFacesChip = document.getElementById("modalHudFacesChip");
+  const modalHudDistanceChip = document.getElementById("modalHudDistanceChip");
+  const modalHudBlinkChip = document.getElementById("modalHudBlinkChip");
+  const modalPauseCamBtn = document.getElementById("modalPauseCamBtn");
+  const modalAutoMarkToggle = document.getElementById("modalAutoMarkToggle");
+
+  let modalIsTracking = false;
+  let modalIsCapturing = false;
+  let modalTargetBoxes = [];
+  let modalCurrentBoxes = [];
+  let modalDetectedLandmarks = [];
+  let modalPositionStatus = "SEARCHING";
+  let modalFaceCount = 0;
+  let modalFaceWidth = 0;
+  let modalTrackPending = false;
+  let modalTrackInterval = null;
+  let modalFaceLockedFrames = 0;
+  let modalIsCamPaused = false;
 
   async function openStudentFaceScanModal(sessionId, courseTitle) {
     modalScanSessionId = sessionId;
@@ -2458,10 +2476,20 @@
     if (modalScanProgressContainer) modalScanProgressContainer.classList.add("hidden");
     if (triggerModalScanBtn) triggerModalScanBtn.disabled = false;
     if (studentFaceScanModal) studentFaceScanModal.classList.remove("hidden");
+    modalIsCapturing = false;
+    modalIsTracking = false;
+    modalTargetBoxes = [];
+    modalCurrentBoxes = [];
+    modalDetectedLandmarks = [];
+    modalFaceLockedFrames = 0;
+    modalIsCamPaused = false;
+    if (modalPauseCamBtn) modalPauseCamBtn.textContent = "Pause Camera";
+
+    updateModalHudChips(0, 0, "SEARCHING");
 
     try {
       modalScanStream = await navigator.mediaDevices.getUserMedia({
-        video: { width: 480, height: 360, facingMode: "user" },
+        video: { width: 640, height: 480, facingMode: "user" },
         audio: false
       });
       if (modalScanVideo) {
@@ -2469,6 +2497,7 @@
         modalScanVideo.onloadedmetadata = () => {
           modalScanVideo.play();
           if (modalScanStandby) modalScanStandby.style.display = "none";
+          modalIsTracking = true;
           startModalHudTracking();
         };
       }
@@ -2480,51 +2509,398 @@
   }
 
   function closeStudentFaceScanModal() {
+    modalIsTracking = false;
+    if (modalTrackInterval) {
+      clearInterval(modalTrackInterval);
+      modalTrackInterval = null;
+    }
     if (modalScanStream) {
       modalScanStream.getTracks().forEach(t => t.stop());
       modalScanStream = null;
     }
     if (studentFaceScanModal) studentFaceScanModal.classList.add("hidden");
     if (modalScanStandby) modalScanStandby.style.display = "flex";
+    modalTargetBoxes = [];
+    modalCurrentBoxes = [];
+    modalDetectedLandmarks = [];
+    updateModalHudChips(0, 0, "SEARCHING");
   }
 
   if (closeFaceScanModalBtn) closeFaceScanModalBtn.addEventListener("click", closeStudentFaceScanModal);
   if (cancelFaceScanBtn) cancelFaceScanBtn.addEventListener("click", closeStudentFaceScanModal);
 
-  function startModalHudTracking() {
-    if (!modalScanHudCanvas || !modalScanVideo) return;
-    const ctx = modalScanHudCanvas.getContext("2d");
-    const draw = () => {
+  if (modalPauseCamBtn) {
+    modalPauseCamBtn.addEventListener("click", () => {
       if (!modalScanStream) return;
-      ctx.clearRect(0, 0, modalScanHudCanvas.width, modalScanHudCanvas.height);
-      // Draw framing corner brackets
-      const w = modalScanHudCanvas.width;
-      const h = modalScanHudCanvas.height;
-      const bw = 240, bh = 240;
-      const bx = (w - bw) / 2;
-      const by = (h - bh) / 2;
+      modalIsCamPaused = !modalIsCamPaused;
+      modalScanStream.getVideoTracks().forEach(t => { t.enabled = !modalIsCamPaused; });
+      modalPauseCamBtn.textContent = modalIsCamPaused ? "Resume Camera" : "Pause Camera";
+    });
+  }
 
-      ctx.strokeStyle = "#38bdf8";
-      ctx.lineWidth = 3;
+  function updateModalHudChips(faceCount, faceWidth, posStatus) {
+    modalFaceCount = faceCount;
+    modalFaceWidth = faceWidth;
+    modalPositionStatus = posStatus;
+
+    if (modalHudFacesChip) {
+      modalHudFacesChip.textContent = `Faces: ${faceCount}`;
+      if (faceCount === 1) {
+        modalHudFacesChip.style.color = "#10b981";
+        modalHudFacesChip.style.borderColor = "rgba(16, 185, 129, 0.4)";
+      } else if (faceCount > 1) {
+        modalHudFacesChip.textContent = `Faces: ${faceCount} (Multiple)`;
+        modalHudFacesChip.style.color = "#ef4444";
+        modalHudFacesChip.style.borderColor = "rgba(239, 68, 68, 0.4)";
+      } else {
+        modalHudFacesChip.style.color = "#ffffff";
+        modalHudFacesChip.style.borderColor = "rgba(255, 255, 255, 0.14)";
+      }
+    }
+
+    if (modalHudDistanceChip) {
+      if (faceCount === 0) {
+        modalHudDistanceChip.textContent = "Align Face";
+        modalHudDistanceChip.style.color = "var(--text-muted)";
+      } else if (faceCount > 1) {
+        modalHudDistanceChip.textContent = "Multiple Faces Detected";
+        modalHudDistanceChip.style.color = "#ef4444";
+      } else {
+        const roundedW = Math.round(faceWidth);
+        if (posStatus === "MOVE_CLOSER") {
+          modalHudDistanceChip.textContent = `Size: ${roundedW}px (Move Closer)`;
+          modalHudDistanceChip.style.color = "#f59e0b";
+        } else if (posStatus === "TOO_CLOSE") {
+          modalHudDistanceChip.textContent = `Size: ${roundedW}px (Too Close)`;
+          modalHudDistanceChip.style.color = "#f59e0b";
+        } else if (posStatus === "ALIGN_CENTER") {
+          modalHudDistanceChip.textContent = `Size: ${roundedW}px (Center Face)`;
+          modalHudDistanceChip.style.color = "#f59e0b";
+        } else {
+          modalHudDistanceChip.textContent = `Size: ${roundedW}px (Optimal)`;
+          modalHudDistanceChip.style.color = "#10b981";
+        }
+      }
+    }
+
+    if (modalHudBlinkChip) {
+      modalHudBlinkChip.textContent = "Blink Liveness: Active";
+    }
+  }
+
+  async function detectModalFaceFrame() {
+    if (!modalIsTracking || !modalScanVideo || !modalScanVideo.videoWidth || modalTrackPending || modalIsCapturing || modalIsCamPaused) return;
+
+    const vw = modalScanVideo.videoWidth;
+    const vh = modalScanVideo.videoHeight;
+
+    // Fast path: Native FaceDetector if supported
+    if (nativeFaceDetector) {
+      try {
+        const detectedFaces = await nativeFaceDetector.detect(modalScanVideo);
+        if (detectedFaces && detectedFaces.length > 0) {
+          const count = detectedFaces.length;
+          modalTargetBoxes = detectedFaces.map(f => {
+            const b = f.boundingBox;
+            const mirroredX = vw - b.x - b.width;
+            return {
+              x: mirroredX,
+              y: b.y,
+              w: b.width,
+              h: b.height,
+              faceCount: count
+            };
+          });
+
+          const primary = detectedFaces[0].boundingBox;
+          const boxW = primary.width;
+          const boxCx = primary.x + primary.width / 2;
+
+          let posStatus = "OPTIMAL";
+          if (count > 1) posStatus = "MULTIPLE_FACES";
+          else if (boxW < 75) posStatus = "MOVE_CLOSER";
+          else if (boxW > vw * 0.85) posStatus = "TOO_CLOSE";
+          else if (Math.abs(boxCx - vw / 2) > vw * 0.28) posStatus = "ALIGN_CENTER";
+
+          // Approximate landmarks from bounding box if not provided
+          const bx = vw - primary.x - primary.width;
+          const by = primary.y;
+          modalDetectedLandmarks = [
+            [bx + boxW * 0.32, by + primary.height * 0.38],
+            [bx + boxW * 0.68, by + primary.height * 0.38],
+            [bx + boxW * 0.50, by + primary.height * 0.55],
+            [bx + boxW * 0.36, by + primary.height * 0.74],
+            [bx + boxW * 0.64, by + primary.height * 0.74]
+          ];
+
+          updateModalHudChips(count, boxW, posStatus);
+          checkModalAutoMark(count, posStatus);
+          return;
+        } else {
+          modalTargetBoxes = [];
+          modalDetectedLandmarks = [];
+          updateModalHudChips(0, 0, "SEARCHING");
+          modalFaceLockedFrames = 0;
+          return;
+        }
+      } catch (e) {
+        // Fallback to backend YuNet tracking
+      }
+    }
+
+    // Backend YuNet Tracking Ping
+    modalTrackPending = true;
+    try {
+      const snapCanvas = document.createElement("canvas");
+      snapCanvas.width = 320;
+      snapCanvas.height = 240;
+      const ctx = snapCanvas.getContext("2d");
+      ctx.drawImage(modalScanVideo, 0, 0, 320, 240);
+      const b64 = snapCanvas.toDataURL("image/jpeg", 0.6);
+
+      const { ok, data } = await safeFetchJson("/api/face/track", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ frame: b64 })
+      });
+
+      if (ok && data && data.detected && data.box) {
+        const scaleX = vw / 320;
+        const scaleY = vh / 240;
+
+        const allBoxes = data.all_boxes || [data.box];
+        modalTargetBoxes = allBoxes.map(b => {
+          const rawX = b[0] * scaleX;
+          const rawY = b[1] * scaleY;
+          const rawW = b[2] * scaleX;
+          const rawH = b[3] * scaleY;
+          return {
+            x: vw - rawX - rawW,
+            y: rawY,
+            w: rawW,
+            h: rawH,
+            faceCount: data.face_count
+          };
+        });
+
+        if (data.landmarks) {
+          modalDetectedLandmarks = data.landmarks.map(pt => [
+            vw - (pt[0] * scaleX),
+            pt[1] * scaleY
+          ]);
+        }
+
+        const primaryW = data.box[2] * scaleX;
+        const posStatus = data.position_status || (data.face_count > 1 ? "MULTIPLE_FACES" : (data.usable ? "OPTIMAL" : "MOVE_CLOSER"));
+
+        updateModalHudChips(data.face_count, primaryW, posStatus);
+        checkModalAutoMark(data.face_count, posStatus);
+      } else {
+        modalTargetBoxes = [];
+        modalDetectedLandmarks = [];
+        updateModalHudChips(0, 0, "SEARCHING");
+        modalFaceLockedFrames = 0;
+      }
+    } catch (e) {
+      // Ignore
+    } finally {
+      modalTrackPending = false;
+    }
+  }
+
+  function checkModalAutoMark(faceCount, posStatus) {
+    if (!modalAutoMarkToggle || !modalAutoMarkToggle.checked || modalIsCapturing) {
+      modalFaceLockedFrames = 0;
+      return;
+    }
+
+    if (faceCount === 1 && posStatus === "OPTIMAL") {
+      modalFaceLockedFrames++;
+      if (modalFaceLockedFrames >= 7) { // Locked for ~1.1s
+        modalFaceLockedFrames = 0;
+        if (triggerModalScanBtn && !triggerModalScanBtn.disabled) {
+          triggerModalScanBtn.click();
+        }
+      }
+    } else {
+      modalFaceLockedFrames = 0;
+    }
+  }
+
+  function startModalHudTracking() {
+    if (modalTrackInterval) clearInterval(modalTrackInterval);
+    modalTrackInterval = setInterval(detectModalFaceFrame, 160);
+    requestAnimationFrame(renderModalTrackingHUD);
+  }
+
+  function renderModalTrackingHUD() {
+    if (!modalIsTracking || !modalScanHudCanvas || !modalScanVideo) return;
+
+    const ctx = modalScanHudCanvas.getContext("2d");
+    const width = modalScanHudCanvas.width;
+    const height = modalScanHudCanvas.height;
+    ctx.clearRect(0, 0, width, height);
+
+    if (modalScanVideo.videoWidth && modalScanHudCanvas.width !== modalScanVideo.videoWidth) {
+      modalScanHudCanvas.width = modalScanVideo.videoWidth;
+      modalScanHudCanvas.height = modalScanVideo.videoHeight;
+    }
+
+    // Lerp boxes towards targets
+    if (modalTargetBoxes.length > 0) {
+      if (modalCurrentBoxes.length !== modalTargetBoxes.length) {
+        modalCurrentBoxes = modalTargetBoxes.map(b => ({ ...b }));
+      } else {
+        const factor = 0.38;
+        for (let i = 0; i < modalTargetBoxes.length; i++) {
+          const tb = modalTargetBoxes[i];
+          const cb = modalCurrentBoxes[i];
+          cb.x += (tb.x - cb.x) * factor;
+          cb.y += (tb.y - cb.y) * factor;
+          cb.w += (tb.w - cb.w) * factor;
+          cb.h += (tb.h - cb.h) * factor;
+          cb.faceCount = tb.faceCount;
+        }
+      }
+    } else {
+      modalCurrentBoxes = [];
+    }
+
+    if (modalCurrentBoxes.length > 0 && !modalIsCapturing) {
+      modalCurrentBoxes.forEach((box, idx) => {
+        const bx = box.x;
+        const by = box.y;
+        const bw = box.w;
+        const bh = box.h;
+
+        let hudColor = "#10b981"; // Green (Optimal)
+        if (box.faceCount > 1) {
+          hudColor = "#ef4444"; // Red (Multiple faces warning)
+        } else if (modalPositionStatus === "MOVE_CLOSER" || modalPositionStatus === "TOO_CLOSE" || modalPositionStatus === "ALIGN_CENTER") {
+          hudColor = "#f59e0b"; // Amber (Position adjustment needed)
+        }
+
+        const cornerLen = Math.min(28, bw * 0.28);
+        ctx.lineWidth = 3.5;
+        ctx.strokeStyle = hudColor;
+        ctx.lineCap = "round";
+
+        // 4 Corner Brackets
+        // Top-Left
+        ctx.beginPath();
+        ctx.moveTo(bx, by + cornerLen);
+        ctx.lineTo(bx, by);
+        ctx.lineTo(bx + cornerLen, by);
+        ctx.stroke();
+
+        // Top-Right
+        ctx.beginPath();
+        ctx.moveTo(bx + bw - cornerLen, by);
+        ctx.lineTo(bx + bw, by);
+        ctx.lineTo(bx + bw, by + cornerLen);
+        ctx.stroke();
+
+        // Bottom-Right
+        ctx.beginPath();
+        ctx.moveTo(bx + bw, by + bh - cornerLen);
+        ctx.lineTo(bx + bw, by + bh);
+        ctx.lineTo(bx + bw - cornerLen, by + bh);
+        ctx.stroke();
+
+        // Bottom-Left
+        ctx.beginPath();
+        ctx.moveTo(bx + cornerLen, by + bh);
+        ctx.lineTo(bx, by + bh);
+        ctx.lineTo(bx, by + bh - cornerLen);
+        ctx.stroke();
+
+        // Animated laser scanning beam inside the primary face box
+        if (idx === 0) {
+          const scanY = by + (Math.sin(Date.now() / 240) * 0.5 + 0.5) * bh;
+          const scanGrad = ctx.createLinearGradient(bx, scanY, bx + bw, scanY);
+          scanGrad.addColorStop(0, "rgba(59, 130, 246, 0)");
+          scanGrad.addColorStop(0.5, hudColor === "#ef4444" ? "rgba(239, 68, 68, 0.7)" : "rgba(6, 182, 212, 0.75)");
+          scanGrad.addColorStop(1, "rgba(59, 130, 246, 0)");
+
+          ctx.lineWidth = 2;
+          ctx.strokeStyle = scanGrad;
+          ctx.beginPath();
+          ctx.moveTo(bx + 4, scanY);
+          ctx.lineTo(bx + bw - 4, scanY);
+          ctx.stroke();
+
+          // 5 Cyan Facial Landmarks
+          if (modalDetectedLandmarks.length > 0) {
+            ctx.fillStyle = hudColor === "#ef4444" ? "rgba(239, 68, 68, 0.85)" : "rgba(6, 182, 212, 0.9)";
+            ctx.shadowColor = hudColor === "#ef4444" ? "#ef4444" : "#06b6d4";
+            ctx.shadowBlur = 4;
+            modalDetectedLandmarks.forEach(pt => {
+              ctx.beginPath();
+              ctx.arc(pt[0], pt[1], 3.2, 0, Math.PI * 2);
+              ctx.fill();
+            });
+            ctx.shadowBlur = 0;
+          }
+        }
+
+        // Pinned Status Pill Badge above Face
+        let labelText = "FACE LOCKED • READY";
+        if (box.faceCount > 1) {
+          labelText = `MULTIPLE FACES (${box.faceCount}) DETECTED`;
+        } else if (modalPositionStatus === "MOVE_CLOSER") {
+          labelText = "MOVE CLOSER";
+        } else if (modalPositionStatus === "TOO_CLOSE") {
+          labelText = "TOO CLOSE";
+        } else if (modalPositionStatus === "ALIGN_CENTER") {
+          labelText = "CENTER FACE";
+        }
+
+        ctx.font = "bold 12px 'Plus Jakarta Sans', sans-serif";
+        const textWidth = ctx.measureText(labelText).width;
+        const pad = 16;
+        const tagH = 24;
+        const tagX = bx + (bw - textWidth - pad) / 2;
+        const tagY = Math.max(10, by - tagH - 8);
+
+        ctx.fillStyle = "rgba(15, 23, 42, 0.92)";
+        ctx.beginPath();
+        if (ctx.roundRect) ctx.roundRect(tagX, tagY, textWidth + pad, tagH, 6);
+        else ctx.rect(tagX, tagY, textWidth + pad, tagH);
+        ctx.fill();
+
+        ctx.lineWidth = 1.5;
+        ctx.strokeStyle = hudColor;
+        ctx.stroke();
+
+        ctx.fillStyle = hudColor;
+        ctx.textAlign = "center";
+        ctx.textBaseline = "middle";
+        ctx.fillText(labelText, tagX + (textWidth + pad) / 2, tagY + tagH / 2);
+        ctx.textAlign = "start";
+      });
+    } else if (!isCapturing && !modalIsCapturing) {
+      // Subtle oval guide when searching
+      const cx = modalScanHudCanvas.width / 2;
+      const cy = modalScanHudCanvas.height / 2;
+      const rx = 100, ry = 135;
+      ctx.strokeStyle = "rgba(148, 163, 184, 0.35)";
+      ctx.lineWidth = 1.5;
+      ctx.setLineDash([6, 6]);
       ctx.beginPath();
-      // TL
-      ctx.moveTo(bx, by + 24); ctx.lineTo(bx, by); ctx.lineTo(bx + 24, by);
-      // TR
-      ctx.moveTo(bx + bw - 24, by); ctx.lineTo(bx + bw, by); ctx.lineTo(bx + bw, by + 24);
-      // BR
-      ctx.moveTo(bx + bw, by + bh - 24); ctx.lineTo(bx + bw, by + bh); ctx.lineTo(bx + bw - 24, by + bh);
-      // BL
-      ctx.moveTo(bx + 24, by + bh); ctx.lineTo(bx, by + bh); ctx.lineTo(bx, by + bh - 24);
+      ctx.ellipse(cx, cy, rx, ry, 0, 0, Math.PI * 2);
       ctx.stroke();
+      ctx.setLineDash([]);
+    }
 
-      requestAnimationFrame(draw);
-    };
-    requestAnimationFrame(draw);
+    if (modalIsTracking) {
+      requestAnimationFrame(renderModalTrackingHUD);
+    }
   }
 
   if (triggerModalScanBtn) {
     triggerModalScanBtn.addEventListener("click", async () => {
-      if (!modalScanSessionId || !modalScanVideo) return;
+      if (!modalScanSessionId || !modalScanVideo || modalIsCapturing) return;
+      modalIsCapturing = true;
       triggerModalScanBtn.disabled = true;
       if (modalScanProgressContainer) modalScanProgressContainer.classList.remove("hidden");
       if (modalScanBlinkPrompt) modalScanBlinkPrompt.classList.remove("hidden");
@@ -2573,9 +2949,11 @@
             </div>
           </div>
         `;
+        modalIsCapturing = false;
         if (currentStudentData) loadStudentDashboard(currentStudentData.roll_no);
       } else {
         playSound("error");
+        modalIsCapturing = false;
         let explanation = data.error || 'Face verification could not be completed.';
         let headline = `Verification Failed: ${data.verdict || 'Error'}`;
 

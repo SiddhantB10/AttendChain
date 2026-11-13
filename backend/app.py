@@ -49,7 +49,7 @@ if configured_token == DEFAULT_ADMIN_TOKEN:
     logger.warning("Set a secure ADMIN_TOKEN in your .env file before production deployment.")
     logger.warning("=" * 70)
 
-def create_app(chain_adapter=None, face_engine=None, db=None, auto_init_session: bool = True) -> Flask:
+def create_app(chain_adapter=None, face_engine=None, db=None, auto_init_session: bool = False) -> Flask:
     app = Flask(__name__, static_folder="static", static_url_path="")
     CORS(app)
 
@@ -968,34 +968,60 @@ def create_app(chain_adapter=None, face_engine=None, db=None, auto_init_session:
                     return jsonify({"detected": False, "face_count": 0, "width": w, "height": h})
 
                 face_count = len(faces)
+                all_boxes = [[int(f[0]), int(f[1]), int(f[2]), int(f[3])] for f in faces]
+                all_landmarks = [[[int(f[4 + 2 * i]), int(f[5 + 2 * i])] for i in range(5)] for f in faces]
                 primary = faces[0]
                 box = [int(primary[0]), int(primary[1]), int(primary[2]), int(primary[3])]
                 score = float(primary[14])
-                landmarks = [[int(primary[4 + 2 * i]), int(primary[5 + 2 * i])] for i in range(5)]
-                usable = (face_count == 1 and box[2] >= 80)
+                landmarks = all_landmarks[0]
+
+                # Position and quality evaluation
+                box_w = box[2]
+                box_cx = box[0] + box[2] / 2
+                
+                if face_count > 1:
+                    position_status = "MULTIPLE_FACES"
+                elif box_w < 70:
+                    position_status = "MOVE_CLOSER"
+                elif box_w > w * 0.85:
+                    position_status = "TOO_CLOSE"
+                elif abs(box_cx - w / 2) > w * 0.28:
+                    position_status = "ALIGN_CENTER"
+                else:
+                    position_status = "OPTIMAL"
+
+                usable = (face_count == 1 and position_status == "OPTIMAL")
 
                 return jsonify({
                     "detected": True,
                     "face_count": face_count,
                     "box": box,
+                    "all_boxes": all_boxes,
                     "score": round(score, 3),
                     "landmarks": landmarks,
+                    "all_landmarks": all_landmarks,
+                    "position_status": position_status,
                     "usable": usable,
                     "width": w,
                     "height": h
                 })
             else: # MockFaceEngine
                 cx, cy = w // 2, h // 2
+                mock_box = [cx - 60, cy - 80, 120, 160]
+                mock_lm = [
+                    [cx - 25, cy - 20], [cx + 25, cy - 20],
+                    [cx, cy],
+                    [cx - 20, cy + 30], [cx + 20, cy + 30]
+                ]
                 return jsonify({
                     "detected": True,
                     "face_count": 1,
-                    "box": [cx - 60, cy - 80, 120, 160],
+                    "box": mock_box,
+                    "all_boxes": [mock_box],
                     "score": 0.95,
-                    "landmarks": [
-                        [cx - 25, cy - 20], [cx + 25, cy - 20],
-                        [cx, cy],
-                        [cx - 20, cy + 30], [cx + 20, cy + 30]
-                    ],
+                    "landmarks": mock_lm,
+                    "all_landmarks": [mock_lm],
+                    "position_status": "OPTIMAL",
                     "usable": True,
                     "width": w,
                     "height": h
