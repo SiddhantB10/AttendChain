@@ -177,19 +177,8 @@ def init_db(db_path: Optional[str] = None):
             ("Prof. Margaret Hamilton", "hamilton@college.edu", "faculty123", "Software Engineering", now_ts)
         )
 
-        # Seed initial groups
-        cursor.execute(
-            "INSERT INTO course_groups (name, subject_code, faculty_email, invite_code, department, created_at) VALUES (?, ?, ?, ?, ?, ?)",
-            ("Distributed Systems & Blockchain", "CS301", "faculty@college.edu", "CS301-X7K", "Computer Science & Engineering", now_ts)
-        )
-        cursor.execute(
-            "INSERT INTO course_groups (name, subject_code, faculty_email, invite_code, department, created_at) VALUES (?, ?, ?, ?, ?, ?)",
-            ("Artificial Intelligence & Neural Systems", "CS402", "faculty@college.edu", "CS402-V9M", "Computer Science & Engineering", now_ts)
-        )
-        cursor.execute(
-            "INSERT INTO course_groups (name, subject_code, faculty_email, invite_code, department, created_at) VALUES (?, ?, ?, ?, ?, ?)",
-            ("Software Architecture & Cloud Native Systems", "SE205", "hamilton@college.edu", "SE205-Q4L", "Software Engineering", now_ts)
-        )
+        # Faculty defaults initialized (no initial groups seeded so faculty can create fresh classes)
+        pass
 
     # Link existing students into group 1 (CS301) and session 1 if needed
     try:

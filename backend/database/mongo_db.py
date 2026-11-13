@@ -85,6 +85,7 @@ class MongoDatabase:
     def _seed_defaults(self):
         """Seed default faculty and groups if database is fresh."""
         try:
+            # Faculty defaults seeded if collection is empty
             if self.db.faculty.count_documents({}) == 0:
                 now_ts = 1700000000
                 self.db.faculty.insert_many([
@@ -101,38 +102,6 @@ class MongoDatabase:
                         "name": "Prof. Margaret Hamilton",
                         "email": "hamilton@college.edu",
                         "password_hash": "faculty123",
-                        "department": "Software Engineering",
-                        "created_at": now_ts
-                    }
-                ])
-
-            if self.db.course_groups.count_documents({}) == 0:
-                now_ts = 1700000000
-                self.db.course_groups.insert_many([
-                    {
-                        "id": 1,
-                        "name": "Distributed Systems & Blockchain",
-                        "subject_code": "CS301",
-                        "faculty_email": "faculty@college.edu",
-                        "invite_code": "CS301-X7K",
-                        "department": "Computer Science & Engineering",
-                        "created_at": now_ts
-                    },
-                    {
-                        "id": 2,
-                        "name": "Artificial Intelligence & Neural Systems",
-                        "subject_code": "CS402",
-                        "faculty_email": "faculty@college.edu",
-                        "invite_code": "CS402-V9M",
-                        "department": "Computer Science & Engineering",
-                        "created_at": now_ts
-                    },
-                    {
-                        "id": 3,
-                        "name": "Software Architecture & Cloud Native Systems",
-                        "subject_code": "SE205",
-                        "faculty_email": "hamilton@college.edu",
-                        "invite_code": "SE205-Q4L",
                         "department": "Software Engineering",
                         "created_at": now_ts
                     }
