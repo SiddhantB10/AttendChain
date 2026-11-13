@@ -4,10 +4,11 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>AttendChain™ ERP — University Biometric Academic Registry</title>
-  <link rel="stylesheet" href="/styles.css?v=20261113_13">
+  <link rel="stylesheet" href="/tokens.css?v=20261113_17">
+  <link rel="stylesheet" href="/styles.css?v=20261113_17">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=Plus+Jakarta+Sans:wght@500;600;700;800&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,400;0,9..144,600;0,9..144,700;0,9..144,800;1,9..144,400&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
 </head>
 <body class="theme-light">
   <div class="app-shell">
@@ -62,14 +63,14 @@
               </svg>
               <span id="dropdownItemConsoleText">Course Console</span>
             </button>
-            <button class="dropdown-item" id="dropdownItemProfile" type="button" role="menuitem">
+            <button class="dropdown-item" id="dropdownItemProfile" type="button" role="menuitem" style="display:none;">
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                 <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path>
                 <circle cx="12" cy="7" r="4"></circle>
               </svg>
               <span>Profile & Face ID</span>
             </button>
-            <button class="dropdown-item" id="dropdownItemSettings" type="button" role="menuitem">
+            <button class="dropdown-item" id="dropdownItemSettings" type="button" role="menuitem" style="display:none;">
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                 <circle cx="12" cy="12" r="3"></circle>
                 <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path>
@@ -183,9 +184,9 @@
 
             <!-- Box 1: Unified Sign In Form -->
             <div id="unifiedSignInBox">
-              <div style="margin-bottom: 20px; text-align: center;">
-                <h3 style="font-size: 1.35rem; font-weight: 800; color: var(--text-main); letter-spacing: -0.01em;">Sign In</h3>
-                <p style="color: var(--text-muted); font-size: 0.86rem; margin-top: 4px;">
+              <div class="sso-auth-header">
+                <h3>Sign In</h3>
+                <p>
                   Enter your credentials to access your AttendChain account.
                 </p>
               </div>
@@ -213,7 +214,7 @@
               <div id="unifiedLoginAlert" class="alert-callout-box error hidden" style="margin-top: 14px;"></div>
 
               <p style="margin-top: 20px; font-size: 0.85rem; text-align: center; color: var(--text-muted);">
-                New student? <a href="#" id="linkToSignUp" style="color: var(--primary-blue); font-weight: 700; text-decoration: none;">Create an account</a>
+                New student? <a href="#" id="linkToSignUp" style="color: var(--text-coral); font-weight: 700; text-decoration: none;">Create an account</a>
               </p>
 
               <!-- Quick Login Fillers -->
@@ -230,9 +231,9 @@
 
             <!-- Box 2: Student Sign Up Form -->
             <div id="unifiedSignUpBox" style="display:none;">
-              <div style="margin-bottom: 20px; text-align: center;">
-                <h3 style="font-size: 1.35rem; font-weight: 800; color: var(--text-main); letter-spacing: -0.01em;">Create Student Account</h3>
-                <p style="color: var(--text-muted); font-size: 0.86rem; margin-top: 4px;">
+              <div class="sso-auth-header">
+                <h3>Create Student Account</h3>
+                <p>
                   Register your account. Your sequential Student ID will be allotted automatically.
                 </p>
               </div>
@@ -257,7 +258,7 @@
                 <input type="password" id="signupPassConfirm" class="text-input-control" placeholder="Re-enter password" autocomplete="new-password">
               </div>
 
-              <button id="signupSubmitBtn" class="btn-primary-action" type="button" style="background:#059669; margin-top: 6px;">
+              <button id="signupSubmitBtn" class="btn-primary-action" type="button" style="margin-top: 6px;">
                 <span>Create Student Account</span>
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2">
                   <line x1="5" y1="12" x2="19" y2="12"></line>
@@ -268,7 +269,7 @@
               <div id="signupAlert" class="alert-callout-box hidden" style="margin-top: 14px;"></div>
 
               <p style="margin-top: 20px; font-size: 0.85rem; text-align: center; color: var(--text-muted);">
-                Already have an account? <a href="#" id="linkToSignIn" style="color: var(--primary-blue); font-weight: 700; text-decoration: none;">Sign in here</a>
+                Already have an account? <a href="#" id="linkToSignIn" style="color: var(--text-coral); font-weight: 700; text-decoration: none;">Sign in here</a>
               </p>
             </div>
 

@@ -1,0 +1,145 @@
+/* ==============================================================================
+   AttendChain™ — Design Tokens & Core Elevation System
+   Restyled Editorial & 3D Tactile Edition
+   ============================================================================== */
+
+:root {
+  /* ----------------- PALETTE TOKENS (Strictly Enforced) ----------------- */
+  --navy-900: #0E1A33;
+  --navy-700: #1D2D50;
+  --navy-500: #4A5878;
+
+  --cream-50:  #FCF9F2;
+  --cream-100: #F6F0E3;
+  --cream-300: #E4DAC6;
+
+  --coral-500: #E8604C;
+  --coral-700: #C2432F;
+
+  /* Status Colors (Distinct from coral; always paired with P/A/L/V letter) */
+  --status-present: #2F7D5B; /* P */
+  --status-absent:  #A63A2B; /* A */
+  --status-late:    #B7791F; /* L */
+  --status-leave:   #4F6D9A; /* V */
+
+  /* ----------------- SEMANTIC COLOR MAP (Light Mode) ----------------- */
+  --bg-app: var(--cream-50);
+  --bg-surface: var(--cream-100);
+  --bg-surface-elevated: #FFFFFF;
+  --bg-card: #FFFFFF;
+  --bg-card-subtle: var(--cream-100);
+  --bg-header: var(--navy-900);
+  --bg-input: #FFFFFF;
+
+  --border-subtle: var(--cream-300);
+  --border-strong: var(--navy-500);
+  --border-focus: var(--navy-700);
+
+  --text-main: var(--navy-900);
+  --text-sub: var(--navy-700);
+  --text-muted: var(--navy-500);
+  --text-inverse: var(--cream-50);
+  --text-coral: var(--coral-700); /* Coral on cream uses Coral 700 for WCAG AA */
+
+  /* ----------------- TYPOGRAPHY ----------------- */
+  --font-serif: 'Fraunces', 'Newsreader', Georgia, 'Times New Roman', serif;
+  --font-sans: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  --font-mono: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
+
+  /* ----------------- UNIFORM RADIUS (Consistently 8px) ----------------- */
+  --radius: 8px;
+  --radius-sm: 8px;
+  --radius-md: 8px;
+  --radius-lg: 8px;
+  --radius-xl: 8px;
+  --radius-2xl: 8px;
+  --radius-full: 9999px; /* Reserved strictly for round status dots & avatars */
+
+  /* ----------------- DEPTH & 3-TIER ELEVATION ----------------- */
+  /* Level 1: Standard Cards & Panels (Hairline cream-300 border + layered navy shadow + 1px top highlight) */
+  --elevation-1: 
+    inset 0 1px 0 rgba(255, 255, 255, 0.8),
+    0 2px 4px rgba(14, 26, 51, 0.04),
+    0 6px 12px rgba(14, 26, 51, 0.05);
+
+  /* Level 2: Modals, Floating Menus & Elevated Cards */
+  --elevation-2:
+    inset 0 1px 0 rgba(255, 255, 255, 0.9),
+    0 4px 8px rgba(14, 26, 51, 0.06),
+    0 16px 24px -4px rgba(14, 26, 51, 0.12);
+
+  /* Level 3: Signature Stat Block & Raised Dial */
+  --elevation-3:
+    inset 0 1px 0 rgba(255, 255, 255, 0.95),
+    0 6px 14px rgba(14, 26, 51, 0.08),
+    0 24px 36px -6px rgba(14, 26, 51, 0.14);
+
+  /* Tactile Button 3D Shadows */
+  --shadow-btn-primary: inset 0 1px 0 rgba(255, 255, 255, 0.4), 0 3px 0 var(--coral-700);
+  --shadow-btn-primary-pressed: inset 0 1px 0 rgba(255, 255, 255, 0.2), 0 1px 0 var(--coral-700);
+
+  --shadow-btn-secondary: inset 0 1px 0 #FFFFFF, 0 3px 0 var(--cream-300);
+  --shadow-btn-secondary-pressed: inset 0 1px 0 #FFFFFF, 0 1px 0 var(--cream-300);
+
+  --shadow-btn-navy: inset 0 1px 0 rgba(255, 255, 255, 0.2), 0 3px 0 #070D1A;
+  --shadow-btn-navy-pressed: inset 0 1px 0 rgba(255, 255, 255, 0.1), 0 1px 0 #070D1A;
+
+  /* Physical Toggle Depressed States */
+  --shadow-toggle-depressed: inset 0 2px 4px rgba(14, 26, 51, 0.2);
+
+  /* ----------------- MOTION (120ms - 200ms) ----------------- */
+  --ease-tactile: cubic-bezier(.2, .7, .2, 1);
+  --transition-tactile: 120ms var(--ease-tactile);
+  --transition-normal: 180ms var(--ease-tactile);
+}
+
+/* ----------------- DARK MODE OVERRIDES ----------------- */
+body.theme-dark,
+[data-theme="dark"] {
+  --bg-app: var(--navy-900);
+  --bg-surface: var(--navy-700);
+  --bg-surface-elevated: #15223E;
+  --bg-card: #15223E;
+  --bg-card-subtle: var(--navy-700);
+  --bg-header: #070D1A;
+  --bg-input: #101B31;
+
+  --border-subtle: rgba(228, 218, 198, 0.18);
+  --border-strong: rgba(228, 218, 198, 0.35);
+  --border-focus: var(--coral-500);
+
+  --text-main: var(--cream-50);
+  --text-sub: var(--cream-100);
+  --text-muted: var(--cream-300);
+  --text-inverse: var(--navy-900);
+  --text-coral: var(--coral-500);
+
+  --elevation-1:
+    inset 0 1px 0 rgba(255, 255, 255, 0.08),
+    0 2px 4px rgba(0, 0, 0, 0.3),
+    0 6px 14px rgba(0, 0, 0, 0.35);
+
+  --elevation-2:
+    inset 0 1px 0 rgba(255, 255, 255, 0.12),
+    0 4px 8px rgba(0, 0, 0, 0.35),
+    0 16px 28px rgba(0, 0, 0, 0.45);
+
+  --elevation-3:
+    inset 0 1px 0 rgba(255, 255, 255, 0.15),
+    0 8px 16px rgba(0, 0, 0, 0.4),
+    0 28px 42px rgba(0, 0, 0, 0.5);
+
+  --shadow-btn-secondary: inset 0 1px 0 rgba(255, 255, 255, 0.1), 0 3px 0 #070D1A;
+  --shadow-btn-secondary-pressed: inset 0 1px 0 rgba(255, 255, 255, 0.05), 0 1px 0 #070D1A;
+}
+
+/* ----------------- GLOBAL ACCESSIBILITY & PREFERS-REDUCED-MOTION ----------------- */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
