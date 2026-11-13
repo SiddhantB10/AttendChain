@@ -179,17 +179,113 @@
   let currentFacultyData = null;
   let currentAdminData = null;
   try {
-    const raw = sessionStorage.getItem("attendchain_student_data");
-    if (raw) currentStudentData = JSON.parse(raw);
-    const rawFac = sessionStorage.getItem("attendchain_faculty_data");
-    if (rawFac) currentFacultyData = JSON.parse(rawFac);
-    const rawAdm = sessionStorage.getItem("attendchain_admin_data");
-    if (rawAdm) currentAdminData = JSON.parse(rawAdm);
+    if (currentUserRole === "student") {
+      const raw = sessionStorage.getItem("attendchain_student_data");
+      if (raw) currentStudentData = JSON.parse(raw);
+    } else if (currentUserRole === "faculty") {
+      const rawFac = sessionStorage.getItem("attendchain_faculty_data");
+      if (rawFac) currentFacultyData = JSON.parse(rawFac);
+      currentStudentData = null;
+      sessionStorage.removeItem("attendchain_student_data");
+    } else if (currentUserRole === "admin") {
+      const rawAdm = sessionStorage.getItem("attendchain_admin_data");
+      if (rawAdm) currentAdminData = JSON.parse(rawAdm);
+      currentStudentData = null;
+      sessionStorage.removeItem("attendchain_student_data");
+    } else {
+      currentStudentData = null;
+      currentFacultyData = null;
+      currentAdminData = null;
+    }
   } catch (e) {
     currentStudentData = null;
     currentFacultyData = null;
     currentAdminData = null;
   }
+
+  // --- Sleek Non-Blocking Toast Notification System ---
+  function showToast(message, type = "info") {
+    let container = document.getElementById("attendToastContainer");
+    if (!container) {
+      container = document.createElement("div");
+      container.id = "attendToastContainer";
+      container.className = "attend-toast-container";
+      document.body.appendChild(container);
+    }
+
+    const toast = document.createElement("div");
+    toast.className = `attend-toast toast-${type}`;
+
+    let iconSvg = "";
+    if (type === "success") {
+      iconSvg = `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>`;
+    } else if (type === "error") {
+      iconSvg = `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/></svg>`;
+    } else {
+      iconSvg = `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>`;
+    }
+
+    toast.innerHTML = `
+      <div style="display:flex; align-items:center; gap:8px;">
+        ${iconSvg}
+        <span>${escapeHtml(message)}</span>
+      </div>
+    `;
+
+    container.appendChild(toast);
+
+    setTimeout(() => {
+      toast.style.opacity = "0";
+      toast.style.transform = "translateX(20px)";
+      setTimeout(() => toast.remove(), 260);
+    }, 3200);
+  }
+
+  // --- Real-Time Cross-Tab & Dashboard Live Sync (Instant Inter-Tab Broadcast) ---
+  const attendSyncChannel = (typeof BroadcastChannel !== "undefined")
+    ? new BroadcastChannel("attendchain_live_sync")
+    : null;
+
+  function notifySessionSync(groupId) {
+    if (attendSyncChannel) {
+      try {
+        attendSyncChannel.postMessage({ type: "SESSION_UPDATE", groupId, timestamp: Date.now() });
+      } catch (_) {}
+    }
+    try {
+      localStorage.setItem("attendchain_last_sync", Date.now().toString());
+    } catch (_) {}
+  }
+
+  function handleLiveSyncUpdate() {
+    if (currentUserRole === "student" && currentStudentData) {
+      loadStudentDashboard(currentStudentData.roll_no);
+    } else if (currentUserRole === "faculty") {
+      loadFacultyConsole();
+      loadActiveSessions();
+    }
+  }
+
+  if (attendSyncChannel) {
+    attendSyncChannel.onmessage = (ev) => {
+      if (ev.data && ev.data.type === "SESSION_UPDATE") {
+        handleLiveSyncUpdate();
+      }
+    };
+  }
+
+  window.addEventListener("storage", (ev) => {
+    if (ev.key === "attendchain_last_sync") {
+      handleLiveSyncUpdate();
+    }
+  });
+
+  window.addEventListener("focus", handleLiveSyncUpdate);
+  document.addEventListener("visibilitychange", () => {
+    if (!document.hidden) {
+      handleLiveSyncUpdate();
+    }
+  });
 
   function updateAuthUI() {
     const academicNavbar = document.getElementById("academicNavbar") || document.querySelector(".academic-navbar");
@@ -200,6 +296,10 @@
     const capsuleUserRole = document.getElementById("capsuleUserRole");
     const dropdownHeaderName = document.getElementById("dropdownHeaderName");
     const dropdownHeaderSub = document.getElementById("dropdownHeaderSub");
+    const dropdownItemProfile = document.getElementById("dropdownItemProfile");
+    const dropdownItemSettings = document.getElementById("dropdownItemSettings");
+    const dropdownItemConsole = document.getElementById("dropdownItemConsole");
+    const dropdownItemConsoleText = document.getElementById("dropdownItemConsoleText");
     const fabJoinClassBtn = document.getElementById("fabJoinClassBtn");
 
     const tabNavGateway = document.getElementById("tabNavGateway");
@@ -227,6 +327,11 @@
       }
       if (dropdownHeaderName) dropdownHeaderName.textContent = stName;
       if (dropdownHeaderSub) dropdownHeaderSub.textContent = `${currentStudentData.roll_no} • ${currentStudentData.email || "student@college.edu"}`;
+
+      // Student Dropdown Menu Items
+      if (dropdownItemProfile) dropdownItemProfile.style.display = "flex";
+      if (dropdownItemSettings) dropdownItemSettings.style.display = "flex";
+      if (dropdownItemConsole) dropdownItemConsole.style.display = "none";
 
       if (tabNavGateway) tabNavGateway.style.display = "none";
       if (tabNavStudentClasses) tabNavStudentClasses.style.display = "inline-flex";
@@ -259,6 +364,14 @@
       if (dropdownHeaderName) dropdownHeaderName.textContent = facName;
       if (dropdownHeaderSub) dropdownHeaderSub.textContent = (currentFacultyData && currentFacultyData.email) ? currentFacultyData.email : "faculty@college.edu";
 
+      // Faculty Dropdown Menu Items: strictly course console only, NO student profile/settings
+      if (dropdownItemProfile) dropdownItemProfile.style.display = "none";
+      if (dropdownItemSettings) dropdownItemSettings.style.display = "none";
+      if (dropdownItemConsole) {
+        dropdownItemConsole.style.display = "flex";
+        if (dropdownItemConsoleText) dropdownItemConsoleText.textContent = "Faculty & Course Console";
+      }
+
       if (tabNavGateway) tabNavGateway.style.display = "none";
       if (tabNavStudentClasses) tabNavStudentClasses.style.display = "none";
       if (tabNavStudentAttendance) tabNavStudentAttendance.style.display = "none";
@@ -266,8 +379,8 @@
       if (tabNavStudentSettings) tabNavStudentSettings.style.display = "none";
       if (tabNavFaculty) tabNavFaculty.style.display = "inline-flex";
       if (tabNavAdmin) tabNavAdmin.style.display = "none";
-      if (tabNavKiosk) tabNavKiosk.style.display = "inline-flex";
-      if (tabNavRegister) tabNavRegister.style.display = "inline-flex";
+      if (tabNavKiosk) tabNavKiosk.style.display = "none";
+      if (tabNavRegister) tabNavRegister.style.display = "none";
       if (fabJoinClassBtn) fabJoinClassBtn.style.display = "none";
 
     } else if (currentUserRole === "admin") {
@@ -285,15 +398,23 @@
       if (dropdownHeaderName) dropdownHeaderName.textContent = "Central University Admin";
       if (dropdownHeaderSub) dropdownHeaderSub.textContent = "admin@attendchain.edu";
 
+      // Admin Dropdown Menu Items: strictly admin console only, NO student profile/settings
+      if (dropdownItemProfile) dropdownItemProfile.style.display = "none";
+      if (dropdownItemSettings) dropdownItemSettings.style.display = "none";
+      if (dropdownItemConsole) {
+        dropdownItemConsole.style.display = "flex";
+        if (dropdownItemConsoleText) dropdownItemConsoleText.textContent = "Central Admin Console";
+      }
+
       if (tabNavGateway) tabNavGateway.style.display = "none";
       if (tabNavStudentClasses) tabNavStudentClasses.style.display = "none";
       if (tabNavStudentAttendance) tabNavStudentAttendance.style.display = "none";
       if (tabNavStudentProfile) tabNavStudentProfile.style.display = "none";
       if (tabNavStudentSettings) tabNavStudentSettings.style.display = "none";
-      if (tabNavFaculty) tabNavFaculty.style.display = "inline-flex";
+      if (tabNavFaculty) tabNavFaculty.style.display = "none";
       if (tabNavAdmin) tabNavAdmin.style.display = "inline-flex";
-      if (tabNavKiosk) tabNavKiosk.style.display = "inline-flex";
-      if (tabNavRegister) tabNavRegister.style.display = "inline-flex";
+      if (tabNavKiosk) tabNavKiosk.style.display = "none";
+      if (tabNavRegister) tabNavRegister.style.display = "none";
       if (fabJoinClassBtn) fabJoinClassBtn.style.display = "none";
 
     } else {
@@ -301,6 +422,9 @@
       if (academicNavbar) academicNavbar.style.display = "none";
       if (userDropdownWrap) userDropdownWrap.style.display = "none";
       if (userCapsule) userCapsule.style.display = "none";
+      if (dropdownItemProfile) dropdownItemProfile.style.display = "none";
+      if (dropdownItemSettings) dropdownItemSettings.style.display = "none";
+      if (dropdownItemConsole) dropdownItemConsole.style.display = "none";
 
       if (tabNavGateway) tabNavGateway.style.display = "none";
       if (tabNavStudentClasses) tabNavStudentClasses.style.display = "none";
@@ -346,6 +470,7 @@
   const userDropdownMenu = document.getElementById("userDropdownMenu");
   const dropdownItemProfile = document.getElementById("dropdownItemProfile");
   const dropdownItemSettings = document.getElementById("dropdownItemSettings");
+  const dropdownItemConsole = document.getElementById("dropdownItemConsole");
 
   function toggleUserDropdown(forceOpen) {
     if (!userDropdownMenu || !userDropdownWrap) return;
@@ -369,17 +494,32 @@
     });
   }
 
+  if (dropdownItemConsole) {
+    dropdownItemConsole.addEventListener("click", () => {
+      toggleUserDropdown(false);
+      if (currentUserRole === "admin") {
+        switchTab("tab-superadmin");
+      } else {
+        switchTab("tab-admin");
+      }
+    });
+  }
+
   if (dropdownItemProfile) {
     dropdownItemProfile.addEventListener("click", () => {
       toggleUserDropdown(false);
-      switchTab("tab-student-profile");
+      if (currentUserRole === "student") {
+        switchTab("tab-student-profile");
+      }
     });
   }
 
   if (dropdownItemSettings) {
     dropdownItemSettings.addEventListener("click", () => {
       toggleUserDropdown(false);
-      switchTab("tab-student-settings");
+      if (currentUserRole === "student") {
+        switchTab("tab-student-settings");
+      }
     });
   }
 
@@ -533,6 +673,18 @@
 
   // --- Tab Navigation ---
   function switchTab(targetId) {
+    // Role guard: Ensure strict console isolation for each role
+    if (currentUserRole === "student") {
+      const staffTabs = ["tab-admin", "tab-superadmin"];
+      if (staffTabs.includes(targetId)) targetId = "tab-portal";
+    } else if (currentUserRole === "faculty") {
+      const nonFacultyTabs = ["tab-student-profile", "tab-student-attendance", "tab-portal", "tab-student-settings", "tab-superadmin"];
+      if (nonFacultyTabs.includes(targetId)) targetId = "tab-admin";
+    } else if (currentUserRole === "admin") {
+      const nonAdminTabs = ["tab-student-profile", "tab-student-attendance", "tab-portal", "tab-student-settings", "tab-admin"];
+      if (nonAdminTabs.includes(targetId)) targetId = "tab-superadmin";
+    }
+
     const navTabs = document.querySelectorAll(".academic-tab-btn, .nav-tab");
     navTabs.forEach(t => {
       if (t.dataset.tab === targetId) t.classList.add("active");
@@ -547,8 +699,6 @@
       loadAdminData();
     } else if (targetId === "tab-superadmin") {
       loadAdminConsole();
-    } else if (targetId === "tab-kiosk") {
-      loadActiveSessions();
     } else if (targetId === "tab-portal") {
       if (currentStudentData) {
         loadStudentDashboard(currentStudentData.roll_no);
@@ -558,7 +708,9 @@
         loadStudentDashboard(currentStudentData.roll_no);
       }
     } else if (targetId === "tab-student-profile") {
-      loadStudentProfile();
+      if (currentUserRole === "student") {
+        loadStudentProfile();
+      }
     } else if (targetId === "tab-student-settings") {
       // settings ready
     }
@@ -693,17 +845,31 @@
 
       if (role === "student") {
         currentStudentData = data.student;
+        currentFacultyData = null;
+        currentAdminData = null;
+        sessionStorage.removeItem("attendchain_faculty_data");
+        sessionStorage.removeItem("attendchain_admin_data");
+        sessionStorage.removeItem("attendchain_admin_token");
         sessionStorage.setItem("attendchain_student_data", JSON.stringify(data.student));
         updateAuthUI();
         loadStudentDashboard(data.student.roll_no);
         switchTab("tab-portal");
       } else if (role === "faculty") {
+        currentStudentData = null;
+        currentAdminData = null;
+        sessionStorage.removeItem("attendchain_student_data");
+        sessionStorage.removeItem("attendchain_admin_data");
+        sessionStorage.removeItem("attendchain_admin_token");
         currentFacultyData = data.faculty;
         sessionStorage.setItem("attendchain_faculty_data", JSON.stringify(data.faculty));
         updateAuthUI();
         loadFacultyConsole();
         switchTab("tab-admin");
       } else if (role === "admin") {
+        currentStudentData = null;
+        currentFacultyData = null;
+        sessionStorage.removeItem("attendchain_student_data");
+        sessionStorage.removeItem("attendchain_faculty_data");
         currentAdminData = data.admin;
         sessionStorage.setItem("attendchain_admin_data", JSON.stringify(data.admin));
         if (data.token) sessionStorage.setItem("attendchain_admin_token", data.token);
@@ -821,13 +987,6 @@
 
   if (signupSubmitBtn) {
     signupSubmitBtn.addEventListener("click", handleStudentSignup);
-  }
-
-  const gatewayLaunchTerminalBtn = document.getElementById("gatewayLaunchTerminalBtn");
-  if (gatewayLaunchTerminalBtn) {
-    gatewayLaunchTerminalBtn.addEventListener("click", () => {
-      switchTab("tab-kiosk");
-    });
   }
 
   // --- Live Status Self-Check ---
@@ -2149,14 +2308,14 @@
         // Render My Joined Classes Grid
         renderStudentClassesGrid(data.joined_groups || [], rollNo);
 
-        // Auto-poll every 6s while on student dashboard tab
+        // Fast live sync: poll every 2s while on student dashboard tab
         if (!studentDashboardPollTimer) {
           studentDashboardPollTimer = setInterval(() => {
             const portalSec = document.getElementById("tab-portal");
             if (portalSec && portalSec.classList.contains("active") && currentUserRole === "student" && currentStudentData) {
               loadStudentDashboard(currentStudentData.roll_no);
             }
-          }, 6000);
+          }, 2000);
         }
       }
     } catch (e) {
@@ -2951,6 +3110,8 @@
         `;
         modalIsCapturing = false;
         if (currentStudentData) loadStudentDashboard(currentStudentData.roll_no);
+        notifySessionSync(modalScanSessionId);
+        showToast("Attendance Marked: PRESENT ✓ Committed to Blockchain", "success");
       } else {
         playSound("error");
         modalIsCapturing = false;
@@ -3034,7 +3195,7 @@
             <div class="group-card-title">${escapeHtml(g.name)}</div>
             <div class="group-card-meta">
               <div>Department: <strong>${escapeHtml(g.department || 'Computer Science')}</strong></div>
-              <div>Enrolled Students: <strong>${g.enrolled_count || 0}</strong> • Total Sessions: <strong>${g.total_sessions || 0}</strong></div>
+              <div>Enrolled Students: <strong>${g.enrolled_count ?? g.enrolled_students_count ?? 0}</strong> • Total Sessions: <strong>${g.total_sessions || 0}</strong></div>
             </div>
 
             <!-- Student Invite Code Pill -->
@@ -3050,7 +3211,7 @@
           <div class="group-card-footer">
             <button class="btn-outline-action view-group-students-btn" data-group-id="${g.id}" data-group-name="${escapeHtml(g.name)}" type="button" style="width:auto; padding:0 12px; font-size:0.8rem; display:inline-flex; align-items:center; gap:6px;">
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path><circle cx="9" cy="7" r="4"></circle><path d="M23 21v-2a4 4 0 0 0-3-3.87"></path><path d="M16 3.13a4 4 0 0 1 0 7.75"></path></svg>
-              <span>Enrolled (${g.enrolled_count || 0})</span>
+              <span>Enrolled (${g.enrolled_count ?? g.enrolled_students_count ?? 0})</span>
             </button>
 
             ${hasActive ? `
@@ -3059,7 +3220,7 @@
                   <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
                   <span>CSV</span>
                 </a>
-                <button class="btn-danger-action close-group-attendance-btn" data-group-id="${g.id}" type="button" style="width:auto; padding:0 14px; font-size:0.8rem;">
+                <button class="btn-danger-action close-group-attendance-btn" data-group-id="${g.id}" data-group-name="${escapeHtml(g.name)}" type="button" style="width:auto; padding:0 14px; font-size:0.8rem;">
                   Close
                 </button>
               </div>
@@ -3104,24 +3265,40 @@
         if (!mins) return;
         const dur = parseInt(mins, 10);
         if (isNaN(dur) || dur < 1 || dur > 720) {
-          alert("Please enter a valid duration between 1 and 720 minutes.");
+          showToast("Please enter a valid duration between 1 and 720 minutes.", "error");
           return;
         }
 
-        const { ok, data } = await safeFetchJson(`/api/faculty/groups/${groupId}/take-attendance`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ duration_minutes: dur })
-        });
+        btn.disabled = true;
+        btn.style.opacity = "0.75";
+        const origHtml = btn.innerHTML;
+        btn.innerHTML = `<span class="spinner-border spinner-border-sm" style="width:13px; height:13px; border:2px solid currentColor; border-top-color:transparent; border-radius:50%; display:inline-block; animation:spin 0.7s linear infinite;"></span> <span>Activating...</span>`;
 
-        if (ok && data.ok) {
-          playSound("success");
-          alert(`Attendance window opened for ${groupName} (${dur} minutes)! Students can now scan their face.`);
-          loadFacultyConsole();
-          loadActiveSessions();
-        } else {
-          playSound("error");
-          alert(data.error || "Failed to open attendance session.");
+        try {
+          const { ok, data } = await safeFetchJson(`/api/faculty/groups/${groupId}/take-attendance`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ duration_minutes: dur })
+          });
+
+          if (ok && data.ok) {
+            playSound("success");
+            showToast(`Attendance window opened for ${groupName} (${dur}m)! Students can now scan face.`, "success");
+            loadFacultyConsole();
+            loadActiveSessions();
+            notifySessionSync(groupId);
+          } else {
+            playSound("error");
+            btn.disabled = false;
+            btn.style.opacity = "1";
+            btn.innerHTML = origHtml;
+            showToast(data.error || "Failed to open attendance session.", "error");
+          }
+        } catch (err) {
+          btn.disabled = false;
+          btn.style.opacity = "1";
+          btn.innerHTML = origHtml;
+          showToast("Network error opening attendance.", "error");
         }
       });
     });
@@ -3130,19 +3307,32 @@
     grid.querySelectorAll(".close-group-attendance-btn").forEach(btn => {
       btn.addEventListener("click", async () => {
         const groupId = btn.dataset.groupId;
+        const groupName = btn.dataset.groupName || "Course Lecture";
         if (!confirm("Are you sure you want to close and lock the attendance window for this lecture?")) return;
 
-        const { ok, data } = await safeFetchJson(`/api/faculty/groups/${groupId}/close-attendance`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" }
-        });
+        btn.disabled = true;
+        btn.style.opacity = "0.75";
+        btn.innerHTML = `<span class="spinner-border spinner-border-sm" style="width:13px; height:13px; border:2px solid currentColor; border-top-color:transparent; border-radius:50%; display:inline-block; animation:spin 0.7s linear infinite;"></span> <span>Closing...</span>`;
 
-        if (ok && data.ok) {
-          playSound("success");
+        try {
+          const { ok, data } = await safeFetchJson(`/api/faculty/groups/${groupId}/close-attendance`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" }
+          });
+
+          if (ok && data.ok) {
+            playSound("success");
+            showToast(`Attendance window closed and locked for ${groupName}.`, "info");
+            loadFacultyConsole();
+            loadActiveSessions();
+            notifySessionSync(groupId);
+          } else {
+            showToast(data.error || "Failed to close attendance session.", "error");
+            loadFacultyConsole();
+          }
+        } catch (err) {
+          showToast("Network error closing attendance.", "error");
           loadFacultyConsole();
-          loadActiveSessions();
-        } else {
-          alert(data.error || "Failed to close attendance session.");
         }
       });
     });
@@ -3385,7 +3575,7 @@
   // =========================================================================
 
   async function loadStudentProfile() {
-    if (!currentStudentData || !currentStudentData.roll_no) return;
+    if (currentUserRole !== "student" || !currentStudentData || !currentStudentData.roll_no) return;
     const roll = currentStudentData.roll_no;
 
     try {
@@ -3889,15 +4079,16 @@
   setInterval(fetchHealth, 15000);
   loadActiveSessions();
 
-  // Live Background Polling: updates active student and faculty boards in real-time
+  // Fast Live Background Polling: updates active student and faculty boards in real-time
   setInterval(() => {
     if (document.hidden) return;
     if (currentUserRole === "student" && currentStudentData) {
       loadStudentDashboard(currentStudentData.roll_no);
     } else if (currentUserRole === "faculty") {
       loadFacultyConsole();
+      loadActiveSessions();
     }
-  }, 4000);
+  }, 2000);
 
   if (currentUserRole === "student" && currentStudentData) {
     loadStudentDashboard(currentStudentData.roll_no);

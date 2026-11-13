@@ -12,6 +12,7 @@ import base64
 import logging
 import io
 import csv
+import threading
 from typing import List, Dict, Any, Optional
 
 import numpy as np
@@ -556,15 +557,18 @@ def create_app(chain_adapter=None, face_engine=None, db=None, auto_init_session:
 
         now_ts = int(time.time())
 
-        # Close any previous active session for this group
+        # Close any previous active session for this group in DB immediately
         old_sessions = app.db.get_sessions(active_only=True, current_timestamp=now_ts)
         for s in old_sessions:
             if s.get("group_id") == group_id:
-                try:
-                    app.chain.close_session(s["session_id"])
-                except Exception:
-                    pass
-                app.db.close_session(s["session_id"])
+                old_sid = s["session_id"]
+                app.db.close_session(old_sid)
+                def _bg_close_old(sid):
+                    try:
+                        app.chain.close_session(sid)
+                    except Exception as e:
+                        logger.debug(f"Async close old session {sid} notice: {e}")
+                threading.Thread(target=_bg_close_old, args=(old_sid,), daemon=True).start()
 
         # Open new session on blockchain
         subject = group["subject_code"]
@@ -620,11 +624,16 @@ def create_app(chain_adapter=None, face_engine=None, db=None, auto_init_session:
             return jsonify({"ok": False, "error": "No active attendance session found for this group."}), 404
 
         sess_id = active_sess["session_id"]
-        try:
-            app.chain.close_session(sess_id)
-        except Exception:
-            pass
+        # Immediately close in local DB so students and faculty see it closed in < 15ms!
         app.db.close_session(sess_id)
+
+        # Synchronize closure on-chain in background thread
+        def _bg_close_active(sid):
+            try:
+                app.chain.close_session(sid)
+            except Exception as e:
+                logger.debug(f"Async close session {sid} notice: {e}")
+        threading.Thread(target=_bg_close_active, args=(sess_id,), daemon=True).start()
 
         return jsonify({
             "ok": True,
@@ -1210,12 +1219,21 @@ def create_app(chain_adapter=None, face_engine=None, db=None, auto_init_session:
         except ValueError:
             return jsonify({"verdict": "invalid_session", "error": "session_id must be integer."}), 404
 
-        # Pre-check session validity and active status
-        if not app.chain.is_session_active(session_id):
-            return jsonify({
-                "verdict": "session_inactive",
-                "error": f"Session #{session_id} has closed or expired. Please ask your faculty to take attendance."
-            }), 400
+        # Pre-check session validity and active status locally first for fast responsiveness
+        sess = app.db.get_session(session_id)
+        now_ts = int(time.time())
+        if sess:
+            if sess.get("closed") == 1 or sess.get("end_time", 0) <= now_ts:
+                return jsonify({
+                    "verdict": "session_inactive",
+                    "error": f"Session #{session_id} has closed or expired. Please ask your faculty to take attendance."
+                }), 400
+        else:
+            if not app.chain.is_session_active(session_id):
+                return jsonify({
+                    "verdict": "session_inactive",
+                    "error": f"Session #{session_id} has closed or expired. Please ask your faculty to take attendance."
+                }), 400
 
         # Retrieve enrolled templates
         enrolled = app.db.get_all_embeddings()

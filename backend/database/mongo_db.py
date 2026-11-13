@@ -526,8 +526,15 @@ class MongoDatabase:
         doc.pop("_id", None)
         return doc
 
-    def get_group_by_id(self, group_id: int) -> Optional[Dict[str, Any]]:
-        doc = self.db.course_groups.find_one({"id": group_id}, {"_id": 0})
+    def get_group_by_id(self, group_id: Any) -> Optional[Dict[str, Any]]:
+        id_variants = [group_id]
+        try:
+            id_variants.append(int(group_id))
+            id_variants.append(str(group_id))
+        except (ValueError, TypeError):
+            pass
+        id_variants = list(set(id_variants))
+        doc = self.db.course_groups.find_one({"id": {"$in": id_variants}}, {"_id": 0})
         return doc
 
     def get_group_by_invite_code(self, invite_code: str) -> Optional[Dict[str, Any]]:
@@ -545,16 +552,23 @@ class MongoDatabase:
         result = []
         for g in cursor:
             g_id = g["id"]
-            enrolled_count = self.db.group_enrollments.count_documents({"group_id": g_id})
-            total_sessions = self.db.sessions.count_documents({"group_id": g_id})
+            id_variants = [g_id]
+            if isinstance(g_id, int):
+                id_variants.append(str(g_id))
+            elif isinstance(g_id, str) and g_id.isdigit():
+                id_variants.append(int(g_id))
+
+            enrolled_count = self.db.group_enrollments.count_documents({"group_id": {"$in": id_variants}})
+            total_sessions = self.db.sessions.count_documents({"group_id": {"$in": id_variants}})
 
             # Check active session
             active_s = self.db.sessions.find_one({
-                "group_id": g_id,
+                "group_id": {"$in": id_variants},
                 "closed": 0,
                 "end_time": {"$gt": now_ts}
             }, {"_id": 0})
 
+            g["enrolled_count"] = enrolled_count
             g["enrolled_students_count"] = enrolled_count
             g["total_sessions"] = total_sessions
             g["active_session"] = active_s
@@ -565,20 +579,31 @@ class MongoDatabase:
         cursor = self.db.course_groups.find({}, {"_id": 0}).sort("id", ASCENDING)
         result = []
         for g in cursor:
-            enrolled = self.db.group_enrollments.count_documents({"group_id": g["id"]})
+            g_id = g["id"]
+            id_variants = [g_id]
+            if isinstance(g_id, int):
+                id_variants.append(str(g_id))
+            elif isinstance(g_id, str) and g_id.isdigit():
+                id_variants.append(int(g_id))
+            enrolled = self.db.group_enrollments.count_documents({"group_id": {"$in": id_variants}})
             g["enrolled_count"] = enrolled
+            g["enrolled_students_count"] = enrolled
             fac = self.get_faculty_by_email(g.get("faculty_email", ""))
             g["faculty_name"] = fac.get("name", "Prof. Instructor") if fac else "Prof. Instructor"
             result.append(g)
         return result
 
-    def enroll_student_in_group(self, group_id: int, student_id: str, roll_no: str) -> bool:
+    def enroll_student_in_group(self, group_id: Any, student_id: str, roll_no: str) -> bool:
         try:
+            try:
+                norm_gid = int(group_id)
+            except (ValueError, TypeError):
+                norm_gid = group_id
             self.db.group_enrollments.update_one(
-                {"group_id": group_id, "student_id": student_id},
+                {"group_id": norm_gid, "student_id": student_id},
                 {
                     "$set": {
-                        "group_id": group_id,
+                        "group_id": norm_gid,
                         "student_id": student_id,
                         "roll_no": roll_no.strip().upper(),
                         "enrolled_at": int(time.time())
@@ -591,16 +616,31 @@ class MongoDatabase:
             logger.warning(f"Mongo enroll student notice: {e}")
             return False
 
-    def is_student_in_group(self, group_id: int, student_id: str) -> bool:
+    def is_student_in_group(self, group_id: Any, student_id: str) -> bool:
+        id_variants = [group_id]
+        try:
+            id_variants.append(int(group_id))
+            id_variants.append(str(group_id))
+        except (ValueError, TypeError):
+            pass
+        id_variants = list(set(id_variants))
         count = self.db.group_enrollments.count_documents({
-            "group_id": group_id,
+            "group_id": {"$in": id_variants},
             "student_id": {"$regex": f"^{re.escape(student_id.strip())}$", "$options": "i"}
         })
         return count > 0
 
-    def get_students_in_group(self, group_id: int) -> List[Dict[str, Any]]:
-        enrollments = list(self.db.group_enrollments.find({"group_id": group_id}, {"_id": 0}))
-        total_sessions = self.db.sessions.count_documents({"group_id": group_id})
+    def get_students_in_group(self, group_id: Any) -> List[Dict[str, Any]]:
+        id_variants = [group_id]
+        try:
+            id_variants.append(int(group_id))
+            id_variants.append(str(group_id))
+        except (ValueError, TypeError):
+            pass
+        id_variants = list(set(id_variants))
+
+        enrollments = list(self.db.group_enrollments.find({"group_id": {"$in": id_variants}}, {"_id": 0}))
+        total_sessions = self.db.sessions.count_documents({"group_id": {"$in": id_variants}})
 
         result = []
         for en in enrollments:
@@ -609,7 +649,7 @@ class MongoDatabase:
                 continue
 
             # Attended sessions in this group
-            sessions_in_group = [s["session_id"] for s in self.db.sessions.find({"group_id": group_id}, {"session_id": 1})]
+            sessions_in_group = [s["session_id"] for s in self.db.sessions.find({"group_id": {"$in": id_variants}}, {"session_id": 1})]
             attended_count = self.db.attendance_records.count_documents({
                 "session_id": {"$in": sessions_in_group},
                 "student_id": {"$regex": f"^{re.escape(en['student_id'])}$", "$options": "i"}
@@ -642,12 +682,20 @@ class MongoDatabase:
                 continue
 
             g_id = g["id"]
+            id_variants = [g_id]
+            try:
+                id_variants.append(int(g_id))
+                id_variants.append(str(g_id))
+            except (ValueError, TypeError):
+                pass
+            id_variants = list(set(id_variants))
+
             fac = self.get_faculty_by_email(g.get("faculty_email", ""))
             g["faculty_name"] = fac.get("name", "Course Instructor") if fac else "Course Instructor"
             g["enrolled_at"] = en.get("enrolled_at", 0)
 
-            total_sessions = self.db.sessions.count_documents({"group_id": g_id})
-            sessions_in_group = [s["session_id"] for s in self.db.sessions.find({"group_id": g_id}, {"session_id": 1})]
+            total_sessions = self.db.sessions.count_documents({"group_id": {"$in": id_variants}})
+            sessions_in_group = [s["session_id"] for s in self.db.sessions.find({"group_id": {"$in": id_variants}}, {"session_id": 1})]
             attended_sessions = self.db.attendance_records.count_documents({
                 "session_id": {"$in": sessions_in_group},
                 "student_id": {"$regex": f"^{re.escape(student_id.strip())}$", "$options": "i"}
@@ -661,7 +709,7 @@ class MongoDatabase:
 
             # Active session check
             active_s = self.db.sessions.find_one({
-                "group_id": g_id,
+                "group_id": {"$in": id_variants},
                 "closed": 0,
                 "end_time": {"$gt": now_ts}
             }, {"_id": 0})
@@ -681,7 +729,7 @@ class MongoDatabase:
 
             # Last session status check
             last_s = self.db.sessions.find_one(
-                {"group_id": g_id},
+                {"group_id": {"$in": id_variants}},
                 sort=[("session_id", DESCENDING)]
             )
             if last_s:
