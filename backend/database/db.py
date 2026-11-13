@@ -577,10 +577,11 @@ class Database:
     def get_attendance_records_for_student(self, student_id: str) -> List[Dict[str, Any]]:
         with self._conn() as conn:
             rows = conn.execute("""
-                SELECT ar.*, s.group_id, cg.name as group_name, cg.subject_code, cg.faculty_name
+                SELECT ar.*, s.group_id, cg.name as group_name, cg.subject_code, f.name as faculty_name
                 FROM attendance_records ar
                 LEFT JOIN sessions s ON ar.session_id = s.session_id
                 LEFT JOIN course_groups cg ON s.group_id = cg.id
+                LEFT JOIN faculty f ON LOWER(cg.faculty_email) = LOWER(f.email)
                 WHERE LOWER(ar.student_id) = LOWER(?)
                 ORDER BY ar.timestamp DESC
             """, (student_id.strip(),)).fetchall()
