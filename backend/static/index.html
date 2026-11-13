@@ -543,7 +543,7 @@
 
         <div class="settings-grid-layout">
           <!-- Change Password Card -->
-          <div class="academic-card" style="margin-bottom:0;">
+          <div class="academic-card settings-tilt-card" style="margin-bottom:0;">
             <div class="card-header-clean">
               <div>
                 <h3>Change Account Password</h3>
@@ -574,7 +574,7 @@
           </div>
 
           <!-- Session & Sign Out Card -->
-          <div class="academic-card" style="margin-bottom:0; display:flex; flex-direction:column; justify-content:space-between;">
+          <div class="academic-card settings-tilt-card" style="margin-bottom:0; display:flex; flex-direction:column; justify-content:space-between;">
             <div>
               <div class="card-header-clean">
                 <div>
@@ -583,16 +583,29 @@
                 </div>
               </div>
 
-              <div style="background:var(--bg-subtle); border:1px solid var(--border-subtle); border-radius:var(--radius-md); padding:16px; margin-bottom:20px;">
-                <div style="font-weight:700; color:var(--text-main); margin-bottom:8px;">Active SSO Session</div>
-                <div style="font-size:0.84rem; color:var(--text-muted); line-height:1.5;">
-                  You are authenticated into the AttendChain Academic Registry with role-enforced access. All session actions are recorded in secure audit logs.
+              <div class="settings-compliance-box">
+                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px;">
+                  <span style="font-weight:700; color:var(--navy-900); font-size:0.9rem;">Institutional SSO Session</span>
+                  <span class="institutional-badge" style="background:rgba(47, 125, 91, 0.12); color:var(--status-present); border:1px solid rgba(47, 125, 91, 0.3);">Active Verified</span>
+                </div>
+                <div style="font-size:0.84rem; color:var(--navy-500); line-height:1.5; margin-bottom:14px;">
+                  Authenticated into AttendChain Academic Registry with role-enforced access. Biometrics and roll timestamps are anchored to cryptographic ledgers.
+                </div>
+                <div style="display:grid; grid-template-columns:1fr 1fr; gap:8px; font-size:0.78rem; border-top:1px solid var(--cream-300); padding-top:12px;">
+                  <div>
+                    <span style="color:var(--navy-500); display:block; margin-bottom:2px;">Protocol</span>
+                    <strong style="color:var(--navy-700); font-family:var(--font-mono);">Hedera 2.0 / SHA-256</strong>
+                  </div>
+                  <div>
+                    <span style="color:var(--navy-500); display:block; margin-bottom:2px;">Audit Security</span>
+                    <strong style="color:var(--navy-700); font-family:var(--font-mono);">Role-Enforced</strong>
+                  </div>
                 </div>
               </div>
             </div>
 
-            <div>
-              <button id="settingsLogoutBtn" class="btn-secondary-action" type="button" style="width:100%; border-color:var(--accent-danger); color:var(--accent-danger); font-weight:700; padding:12px;">
+            <div style="margin-top:20px;">
+              <button id="settingsLogoutBtn" class="btn-danger-outline" type="button">
                 Sign Out of AttendChain
               </button>
             </div>
@@ -1175,12 +1188,13 @@
         <button id="closeFaceResetModalBtn" class="modal-close-btn" type="button">&times;</button>
       </div>
       <div class="modal-dialog-body">
-        <p style="color:var(--text-muted); font-size:0.86rem; margin-bottom:14px;">
-          Institutional policy requires administrator authorization to re-enroll a new biometric facial template. Please provide a brief explanation.
-        </p>
+        <div style="background:var(--cream-100); border:1px solid var(--cream-300); border-radius:var(--radius); padding:12px 14px; margin-bottom:16px; font-size:0.82rem; color:var(--navy-500); line-height:1.45;">
+          <strong style="color:var(--navy-900); display:block; margin-bottom:4px;">Institutional Authorization Required:</strong>
+          Institutional policy requires administrator review to unlock re-enrollment for a new biometric facial template.
+        </div>
         <div class="form-field-group">
           <label for="faceResetReasonInput" class="form-label">Reason for Request:</label>
-          <textarea id="faceResetReasonInput" class="text-input-control" rows="3" placeholder="e.g. Webcam quality issue, significant appearance change, or previous capture defect..."></textarea>
+          <textarea id="faceResetReasonInput" class="text-input-control" rows="3" placeholder="Webcam replacement, appearance change, or capture defect..."></textarea>
         </div>
         <div id="faceResetModalAlert" class="alert-callout-box hidden"></div>
       </div>
@@ -1203,20 +1217,20 @@
       <div class="modal-dialog-header">
         <div>
           <div class="modal-dialog-title">Join Class</div>
-          <div style="font-size:0.84rem; color:var(--text-muted); margin-top:2px;">Enter the Course Invite Code to enroll</div>
+          <div style="font-size:0.84rem; color:var(--navy-500); margin-top:2px;">Enter the Course Invite Code to enroll</div>
         </div>
         <button class="modal-close-btn" id="closeJoinClassModalBtn" type="button" onclick="closeJoinClassModal()">&times;</button>
       </div>
       <div class="modal-dialog-body">
         <div class="form-field-group">
           <label for="modalInviteCodeInput" class="form-label">Course Invite Code:</label>
-          <input type="text" id="modalInviteCodeInput" class="text-input-control" placeholder="e.g. CS402-V9M" style="text-transform:uppercase; font-family:var(--font-mono); font-weight:700; font-size:1.05rem; letter-spacing:0.05em;">
+          <input type="text" id="modalInviteCodeInput" class="text-input-control" placeholder="e.g. CS402-V9M" style="text-transform:uppercase; font-family:var(--font-mono); font-weight:700; font-size:1.05rem; letter-spacing:0.05em; font-variant-numeric:tabular-nums;">
         </div>
         <div id="modalJoinAlert" class="alert-callout-box hidden"></div>
         
         <!-- Course Codes helper note -->
-        <div style="background:var(--bg-subtle); border:1px solid var(--border-subtle); border-radius:var(--radius-md); padding:12px 14px; margin-top:14px; font-size:0.82rem; color:var(--text-muted); line-height:1.45;">
-          <strong style="color:var(--text-main); display:block; margin-bottom:4px;">How to get an Invite Code:</strong>
+        <div style="background:var(--cream-100); border:1px solid var(--cream-300); border-radius:var(--radius); padding:12px 14px; margin-top:14px; font-size:0.82rem; color:var(--navy-500); line-height:1.45;">
+          <strong style="color:var(--navy-900); display:block; margin-bottom:4px;">How to get an Invite Code:</strong>
           Course Invite Codes are generated when faculty creates a Subject Group in the Faculty Console. Check with your course instructor or sign in as Faculty to create a new class.
         </div>
       </div>
@@ -1228,6 +1242,6 @@
   </div>
 
   <!-- Main Application Logic (Placed at end of body so all modals are in DOM) -->
-  <script src="/app.js?v=20261113_16"></script>
+  <script src="/app.js?v=20261113_18"></script>
 </body>
 </html>

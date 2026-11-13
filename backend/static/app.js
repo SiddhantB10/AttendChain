@@ -4010,15 +4010,15 @@
 
         tbody.innerHTML = requests.map(r => `
           <tr>
-            <td style="font-weight:700; color:var(--text-main);">${escapeHtml(r.name)}</td>
-            <td style="font-family:var(--font-mono); font-weight:700; color:var(--primary-blue);">${escapeHtml(r.roll_no)}</td>
-            <td style="color:var(--text-muted); font-size:0.86rem;">${escapeHtml(r.email || '-')}</td>
-            <td style="font-size:0.86rem; color:var(--text-main);">${escapeHtml(r.face_reset_reason || 'Student requested reset')}</td>
+            <td style="font-weight:700; color:var(--navy-900);">${escapeHtml(r.name)}</td>
+            <td style="font-family:var(--font-mono); font-weight:700; color:var(--coral-700); font-variant-numeric:tabular-nums;">${escapeHtml(r.roll_no)}</td>
+            <td style="color:var(--navy-500); font-size:0.86rem;">${escapeHtml(r.email || '-')}</td>
+            <td style="font-size:0.86rem; color:var(--navy-700);">${escapeHtml(r.face_reset_reason || 'Student requested reset')}</td>
             <td style="white-space:nowrap;">
-              <button class="btn-primary-action admin-approve-reset-btn" data-roll="${escapeHtml(r.roll_no)}" type="button" style="padding:4px 12px; font-size:0.78rem; background:#059669; display:inline-flex; width:auto; margin-right:6px;">
+              <button class="admin-approve-reset-btn" data-roll="${escapeHtml(r.roll_no)}" type="button" style="margin-right:6px;">
                 ✓ Approve
               </button>
-              <button class="btn-secondary-action admin-reject-reset-btn" data-roll="${escapeHtml(r.roll_no)}" type="button" style="padding:4px 12px; font-size:0.78rem; color:#dc2626; border-color:#dc2626; display:inline-flex; width:auto;">
+              <button class="admin-reject-reset-btn" data-roll="${escapeHtml(r.roll_no)}" type="button">
                 ✕ Reject
               </button>
             </td>
