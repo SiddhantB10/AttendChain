@@ -923,7 +923,7 @@
       <div class="modal-dialog-header">
         <div>
           <div class="modal-dialog-title">Biometric Attendance Verification</div>
-          <div id="modalCourseTitle" style="font-size:0.84rem; color:var(--text-muted); margin-top:2px;">Course: CS301 - Distributed Systems</div>
+          <div id="modalCourseTitle" style="font-size:0.84rem; color:var(--navy-500); margin-top:2px;">Course: CS301 - Distributed Systems</div>
         </div>
         <button id="closeFaceScanModalBtn" class="modal-close-btn" type="button">&times;</button>
       </div>
@@ -952,7 +952,7 @@
               <path d="M12 8v8M8 12h8"/>
             </svg>
             <h4 style="font-size:1.05rem; font-weight:700;">Camera Ready</h4>
-            <p style="color:#94a3b8; font-size:0.84rem; margin-top:4px;">Position your face inside the framing brackets.</p>
+            <p style="color:var(--navy-500); font-size:0.84rem; margin-top:4px;">Position your face inside the framing brackets.</p>
           </div>
         </div>
 
@@ -964,7 +964,7 @@
           <button id="triggerModalScanBtn" class="btn-primary-action" type="button" style="flex: 1.5;">
             <span>Mark Attendance Now</span>
           </button>
-          <label style="display:flex; align-items:center; gap:8px; font-size:0.84rem; font-weight:600; cursor:pointer; user-select:none; white-space:nowrap;">
+          <label style="display:flex; align-items:center; gap:8px; font-size:0.84rem; font-weight:600; cursor:pointer; user-select:none; white-space:nowrap; color:var(--navy-700);">
             <input type="checkbox" id="modalAutoMarkToggle">
             <span>Auto-Detect</span>
           </label>
@@ -972,12 +972,12 @@
 
         <!-- Burst capture progress -->
         <div id="modalScanProgressContainer" class="hidden" style="margin-bottom: 16px;">
-          <div style="display:flex; justify-content:space-between; font-size:0.82rem; font-weight:700; margin-bottom:6px;">
+          <div style="display:flex; justify-content:space-between; font-size:0.82rem; font-weight:700; margin-bottom:6px; color:var(--navy-900);">
             <span id="modalScanStatusText">Analyzing facial features & liveness...</span>
             <span id="modalScanPercentText">0%</span>
           </div>
-          <div style="height:6px; background:var(--bg-subtle); border-radius:3px; overflow:hidden;">
-            <div id="modalScanProgressFill" style="height:100%; width:0%; background:var(--primary-blue); transition:width 0.1s linear;"></div>
+          <div style="height:6px; background:var(--cream-300); border-radius:var(--radius); overflow:hidden;">
+            <div id="modalScanProgressFill" style="height:100%; width:0%; background:var(--coral-500); transition:width 0.1s linear;"></div>
           </div>
         </div>
 

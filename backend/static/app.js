@@ -2354,10 +2354,10 @@
     gridEl.innerHTML = groups.map(g => {
       const pct = g.attendance_percent || 0;
       const isDef = g.is_defaulter;
-      const progressColor = isDef ? "var(--accent-danger)" : "var(--accent-success)";
+      const progressColor = isDef ? "var(--status-absent)" : "var(--status-present)";
       const standingTag = isDef
-        ? `<span class="badge badge-danger">Shortage (< 75%)</span>`
-        : `<span class="badge badge-success">Eligible</span>`;
+        ? `<span class="status-badge-a"><span class="toggle-letter">A</span> Shortage (< 75%)</span>`
+        : `<span class="status-badge-p"><span class="toggle-letter">P</span> Eligible</span>`;
 
       const activeSess = g.active_session;
       const hasActive = !!activeSess;
@@ -2369,15 +2369,15 @@
         if (alreadyMarked) {
           actionBoxHtml = `
             <div class="class-attendance-box marked-mode">
-              <div style="font-weight:700; font-size:0.88rem; color:#059669; display:flex; align-items:center; gap:6px; margin-bottom:4px;">
+              <div style="font-weight:700; font-size:0.88rem; color:var(--status-present); display:flex; align-items:center; gap:6px; margin-bottom:4px;">
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>
-                <span>Attendance Marked (PRESENT)</span>
+                <span>Attendance Marked: <strong class="status-badge-p"><span class="toggle-letter">P</span> PRESENT</strong></span>
               </div>
-              <div style="font-size:0.78rem; color:var(--text-muted); margin-bottom:10px;">
+              <div style="font-size:0.78rem; color:var(--navy-500); margin-bottom:10px;">
                 Recorded on Hedera SCS • Lecture Session #${activeSess.session_id}
               </div>
               <button class="btn-marked" disabled type="button">
-                Marked (Present)
+                <span class="toggle-letter" style="font-weight:800; font-family:var(--font-serif); margin-right:4px;">P</span> Marked (Present)
               </button>
             </div>
           `;
@@ -2389,7 +2389,7 @@
                 <span class="class-live-dot"></span>
                 <span>Live Attendance In Progress (Closes in ${formatTime(remaining)})</span>
               </div>
-              <div style="font-size:0.78rem; color:var(--text-muted); margin-bottom:10px;">
+              <div style="font-size:0.78rem; color:var(--navy-500); margin-bottom:10px;">
                 Faculty has opened biometric verification for Lecture #${activeSess.session_id}.
               </div>
               <button class="btn-mark-active class-scan-trigger-btn" type="button"
@@ -2406,22 +2406,22 @@
       } else {
         let lastStatusText = "";
         if (g.last_session_marked === true) {
-          lastStatusText = `<span style="color:#059669; font-weight:700;">Last Lecture: Marked Present</span>`;
+          lastStatusText = `<span class="status-badge-p"><span class="toggle-letter">P</span> Present</span>`;
         } else if (g.last_session_marked === false) {
-          lastStatusText = `<span style="color:#dc2626; font-weight:700;">Last Lecture: Missed / Not Marked</span>`;
+          lastStatusText = `<span class="status-badge-a"><span class="toggle-letter">A</span> Missed</span>`;
         } else {
-          lastStatusText = `<span>No sessions conducted yet</span>`;
+          lastStatusText = `<span style="color:var(--navy-500);">No sessions yet</span>`;
         }
 
         actionBoxHtml = `
           <div class="class-attendance-box closed-mode">
-            <div style="font-size:0.8rem; color:var(--text-muted); margin-bottom:8px; display:flex; align-items:center; gap:6px;">
+            <div style="font-size:0.8rem; color:var(--navy-500); margin-bottom:8px; display:flex; align-items:center; gap:6px;">
               <span>Attendance Closed •</span> ${lastStatusText}
             </div>
             <button class="btn-closed" disabled type="button">
               Attendance Closed
             </button>
-            <div style="font-size:0.75rem; color:var(--text-muted); margin-top:6px; text-align:center;">
+            <div style="font-size:0.75rem; color:var(--navy-500); margin-top:6px; text-align:center;">
               Option unlocks when instructor begins taking attendance.
             </div>
           </div>
