@@ -793,13 +793,14 @@ class Database:
             ).fetchall()
 
             result = []
+            min_threshold = int(os.getenv("MIN_ATTENDANCE_PERCENT", "75"))
             for r in rows:
                 d = dict(r)
                 total = d["total_sessions"]
                 attended = d["attended_sessions"]
                 pct = (attended * 100 // total) if total > 0 else 100
                 d["attendance_percent"] = pct
-                d["is_defaulter"] = pct < 75
+                d["is_defaulter"] = (pct < min_threshold) if total > 0 else False
 
                 result.append(d)
             return result
@@ -830,13 +831,14 @@ class Database:
             ).fetchall()
 
             result = []
+            min_threshold = int(os.getenv("MIN_ATTENDANCE_PERCENT", "75"))
             for r in rows:
                 d = dict(r)
                 total = d["total_sessions"]
                 attended = d["attended_sessions"]
                 pct = (attended * 100 // total) if total > 0 else 100
                 d["attendance_percent"] = pct
-                d["is_defaulter"] = pct < 75
+                d["is_defaulter"] = (pct < min_threshold) if total > 0 else False
 
                 if d.get("active_session_id"):
                     # Check if student already marked attendance for this active session

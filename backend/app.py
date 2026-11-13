@@ -177,16 +177,18 @@ def create_app(chain_adapter=None, face_engine=None, db=None, auto_init_session:
         }
         if identifier.lower() in valid_admin_emails:
             if password in valid_admin_passwords or password == DEFAULT_ADMIN_PASSWORD:
+                admin_obj = {
+                    "name": "Central University Administration",
+                    "email": DEFAULT_ADMIN_EMAIL,
+                    "role": "admin",
+                    "permissions": ["all", "manage_faculty", "manage_groups", "view_audit", "system_settings", "face_resets"]
+                }
                 return jsonify({
                     "ok": True,
                     "role": "admin",
                     "token": admin_token,
-                    "user": {
-                        "name": "Central University Administration",
-                        "email": DEFAULT_ADMIN_EMAIL,
-                        "role": "admin",
-                        "permissions": ["all", "manage_faculty", "manage_groups", "view_audit", "system_settings", "face_resets"]
-                    }
+                    "user": admin_obj,
+                    "admin": admin_obj
                 }), 200
 
         # 2. Check Faculty
@@ -194,32 +196,36 @@ def create_app(chain_adapter=None, face_engine=None, db=None, auto_init_session:
         if faculty:
             stored_pass = faculty.get("password_hash", "")
             if password == stored_pass or password in (FACULTY_DEFAULT_PASS, "admin123", admin_token, DEFAULT_ADMIN_TOKEN):
+                fac_obj = {
+                    "name": faculty["name"],
+                    "email": faculty["email"],
+                    "department": faculty["department"],
+                    "role": "faculty",
+                    "permissions": ["create_group", "take_attendance", "close_session", "export_csv"]
+                }
                 return jsonify({
                     "ok": True,
                     "role": "faculty",
                     "token": admin_token,
-                    "user": {
-                        "name": faculty["name"],
-                        "email": faculty["email"],
-                        "department": faculty["department"],
-                        "role": "faculty",
-                        "permissions": ["create_group", "take_attendance", "close_session", "export_csv"]
-                    }
+                    "user": fac_obj,
+                    "faculty": fac_obj
                 }), 200
 
         # Fallback faculty by keyword "faculty"
         if identifier.lower() in ("faculty", "faculty@college.edu", "faculty@attendchain.edu") and password in (FACULTY_DEFAULT_PASS, "admin123", admin_token, DEFAULT_ADMIN_TOKEN):
+            fac_obj = {
+                "name": "Prof. Dr. Alan Turing",
+                "email": "faculty@college.edu",
+                "department": "Computer Science & Engineering",
+                "role": "faculty",
+                "permissions": ["create_group", "take_attendance", "close_session", "export_csv"]
+            }
             return jsonify({
                 "ok": True,
                 "role": "faculty",
                 "token": admin_token,
-                "user": {
-                    "name": "Dr. Alan Turing",
-                    "email": "faculty@college.edu",
-                    "department": "Computer Science & Engineering",
-                    "role": "faculty",
-                    "permissions": ["create_group", "take_attendance", "close_session", "export_csv"]
-                }
+                "user": fac_obj,
+                "faculty": fac_obj
             }), 200
 
         # 3. Check Student (by Email OR Roll No OR Student ID)
@@ -231,6 +237,8 @@ def create_app(chain_adapter=None, face_engine=None, db=None, auto_init_session:
                 total_sessions = sum(g.get("total_sessions", 0) for g in joined_groups)
                 attended_sessions = sum(g.get("attended_sessions", 0) for g in joined_groups)
                 pct = (attended_sessions * 100 // total_sessions) if total_sessions > 0 else 100
+                min_threshold = int(os.getenv("MIN_ATTENDANCE_PERCENT", "75"))
+                is_def = (pct < min_threshold) if total_sessions > 0 else False
                 return jsonify({
                     "ok": True,
                     "role": "student",
@@ -248,7 +256,7 @@ def create_app(chain_adapter=None, face_engine=None, db=None, auto_init_session:
                         "total_sessions": total_sessions,
                         "attended_sessions": attended_sessions,
                         "attendance_percent": pct,
-                        "is_defaulter": pct < 75
+                        "is_defaulter": is_def
                     },
                     "joined_groups": joined_groups
                 }), 200
@@ -428,6 +436,9 @@ def create_app(chain_adapter=None, face_engine=None, db=None, auto_init_session:
         attended_sessions = sum(g.get("attended_sessions", 0) for g in joined_groups)
         pct = (attended_sessions * 100 // total_sessions) if total_sessions > 0 else 100
 
+        min_threshold = int(os.getenv("MIN_ATTENDANCE_PERCENT", "75"))
+        is_def = (pct < min_threshold) if total_sessions > 0 else False
+
         return jsonify({
             "ok": True,
             "role": "student",
@@ -441,7 +452,7 @@ def create_app(chain_adapter=None, face_engine=None, db=None, auto_init_session:
                 "total_sessions": total_sessions,
                 "attended_sessions": attended_sessions,
                 "attendance_percent": pct,
-                "is_defaulter": pct < 75
+                "is_defaulter": is_def
             },
             "joined_groups": joined_groups
         }), 200
@@ -460,6 +471,7 @@ def create_app(chain_adapter=None, face_engine=None, db=None, auto_init_session:
         records = app.db.get_all_attendance_records()
 
         return jsonify({
+            "ok": True,
             "total_faculties": len(faculties),
             "total_groups": len(groups),
             "total_students": len(students),
@@ -720,7 +732,7 @@ def create_app(chain_adapter=None, face_engine=None, db=None, auto_init_session:
                 "total_sessions": total_sessions,
                 "attended_sessions": attended_sessions,
                 "attendance_percent": overall_pct,
-                "is_defaulter": overall_pct < 75
+                "is_defaulter": (overall_pct < int(os.getenv("MIN_ATTENDANCE_PERCENT", "75"))) if total_sessions > 0 else False
             },
             "joined_groups": joined_groups,
             "active_attendance_sessions": active_attendance_sessions,

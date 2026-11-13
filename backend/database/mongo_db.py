@@ -656,6 +656,7 @@ class MongoDatabase:
             })
 
             pct = (attended_count * 100 // total_sessions) if total_sessions > 0 else 100
+            min_threshold = int(os.getenv("MIN_ATTENDANCE_PERCENT", "75"))
             result.append({
                 "student_id": stu["student_id"],
                 "roll_no": stu["roll_no"],
@@ -665,7 +666,7 @@ class MongoDatabase:
                 "attended_sessions": attended_count,
                 "total_sessions": total_sessions,
                 "attendance_percent": pct,
-                "is_defaulter": pct < 75
+                "is_defaulter": (pct < min_threshold) if total_sessions > 0 else False
             })
         return result
 
@@ -702,10 +703,11 @@ class MongoDatabase:
             })
 
             pct = (attended_sessions * 100 // total_sessions) if total_sessions > 0 else 100
+            min_threshold = int(os.getenv("MIN_ATTENDANCE_PERCENT", "75"))
             g["total_sessions"] = total_sessions
             g["attended_sessions"] = attended_sessions
             g["attendance_percent"] = pct
-            g["is_defaulter"] = pct < 75
+            g["is_defaulter"] = (pct < min_threshold) if total_sessions > 0 else False
 
             # Active session check
             active_s = self.db.sessions.find_one({

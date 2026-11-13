@@ -860,8 +860,8 @@
         sessionStorage.removeItem("attendchain_student_data");
         sessionStorage.removeItem("attendchain_admin_data");
         sessionStorage.removeItem("attendchain_admin_token");
-        currentFacultyData = data.faculty;
-        sessionStorage.setItem("attendchain_faculty_data", JSON.stringify(data.faculty));
+        currentFacultyData = data.faculty || data.user;
+        sessionStorage.setItem("attendchain_faculty_data", JSON.stringify(currentFacultyData));
         updateAuthUI();
         loadFacultyConsole();
         switchTab("tab-admin");
@@ -870,8 +870,8 @@
         currentFacultyData = null;
         sessionStorage.removeItem("attendchain_student_data");
         sessionStorage.removeItem("attendchain_faculty_data");
-        currentAdminData = data.admin;
-        sessionStorage.setItem("attendchain_admin_data", JSON.stringify(data.admin));
+        currentAdminData = data.admin || data.user;
+        sessionStorage.setItem("attendchain_admin_data", JSON.stringify(currentAdminData));
         if (data.token) sessionStorage.setItem("attendchain_admin_token", data.token);
         updateAuthUI();
         loadAdminConsole();
