@@ -123,14 +123,42 @@
     return `<a href="${url}" target="_blank" rel="noopener noreferrer" class="blockchain-hash-link" title="Open transaction in HashScan (${escapeHtml(clean)})"><span>${escapeHtml(text)}</span><span class="hash-ext-icon">↗</span></a>`;
   }
 
+  // Signed session token issued by the server at sign-in (sent as "Authorization: Bearer ...")
+  function getSessionToken() {
+    return sessionStorage.getItem("attendchain_session_token") || "";
+  }
+
+  function setSessionToken(token) {
+    if (token) sessionStorage.setItem("attendchain_session_token", token);
+    else sessionStorage.removeItem("attendchain_session_token");
+  }
+
+  // Kept for older call sites that send X-Admin-Token: a manually entered API token, else the session token
   function getAdminToken() {
-    return sessionStorage.getItem("attendchain_admin_token") || "attendchain-admin-secret-change-me";
+    return sessionStorage.getItem("attendchain_admin_token") || getSessionToken();
+  }
+
+  let sessionExpiryHandled = false;
+  function handleSessionExpired() {
+    if (sessionExpiryHandled) return;
+    sessionExpiryHandled = true;
+    try {
+      if (typeof showToast === "function") showToast("Your session has expired. Please sign in again.", "error");
+    } catch (e) { /* ignore */ }
+    try { logoutUser(); } catch (e) { /* ignore */ }
+    setTimeout(() => { sessionExpiryHandled = false; }, 3000);
   }
 
   // Bulletproof Safe Fetch JSON Helper - Prevents any "<!doctype" or HTML leaking into JSON errors
   async function safeFetchJson(url, options = {}) {
     try {
-      const res = await fetch(url, options);
+      const token = getSessionToken();
+      const headers = new Headers(options.headers || {});
+      if (token && !headers.has("Authorization")) headers.set("Authorization", `Bearer ${token}`);
+      const res = await fetch(url, { ...options, headers });
+      if (res.status === 401 && token && !String(url).includes("/api/auth/")) {
+        handleSessionExpired();
+      }
       const contentType = res.headers.get("content-type") || "";
       let data = {};
       if (contentType.includes("application/json")) {
@@ -198,6 +226,12 @@
 
   // --- Role-Based Auth State ---
   let currentUserRole = sessionStorage.getItem("attendchain_user_role") || "guest"; // 'student', 'faculty', 'admin', 'guest'
+  if (currentUserRole !== "guest" && !getSessionToken()) {
+    // Signed in before session tokens existed (or token lost): start from the sign-in screen
+    currentUserRole = "guest";
+    ["attendchain_user_role", "attendchain_student_data", "attendchain_faculty_data",
+     "attendchain_admin_data", "attendchain_admin_token"].forEach(k => sessionStorage.removeItem(k));
+  }
   let currentStudentData = null;
   let currentFacultyData = null;
   let currentAdminData = null;
@@ -469,6 +503,7 @@
 
   function logoutUser() {
     playSound("click");
+    setSessionToken("");
     sessionStorage.removeItem("attendchain_user_role");
     sessionStorage.removeItem("attendchain_student_data");
     sessionStorage.removeItem("attendchain_faculty_data");
@@ -867,6 +902,8 @@
       playSound("success");
       const role = data.role; // 'student', 'faculty', 'admin'
       currentUserRole = role;
+      setSessionToken(data.token);
+      sessionStorage.removeItem("attendchain_admin_token");
       sessionStorage.setItem("attendchain_user_role", role);
 
       if (unifiedLoginAlert) unifiedLoginAlert.classList.add("hidden");
@@ -900,7 +937,6 @@
         sessionStorage.removeItem("attendchain_faculty_data");
         currentAdminData = data.admin || data.user;
         sessionStorage.setItem("attendchain_admin_data", JSON.stringify(currentAdminData));
-        if (data.token) sessionStorage.setItem("attendchain_admin_token", data.token);
         updateAuthUI();
         loadAdminConsole();
         switchTab("tab-superadmin");
@@ -995,6 +1031,7 @@
       }
 
       // Auto-login newly created student
+      setSessionToken(data.token);
       setTimeout(() => {
         currentUserRole = "student";
         currentStudentData = data.student;
@@ -1024,6 +1061,8 @@
       if (!ok) throw new Error(d.error || "Health check failed");
 
       registeredStudentCount = d.student_count || 0;
+      const quickDemoRow = document.getElementById("quickDemoRow");
+      if (quickDemoRow) quickDemoRow.style.display = d.demo_logins ? "" : "none";
       const enrolledBadge = document.getElementById("enrolledStudentCountBadge");
       if (enrolledBadge) enrolledBadge.textContent = registeredStudentCount;
 
@@ -1053,12 +1092,14 @@
       if (networkEl) networkEl.textContent = `${d.network || "Hedera"} (${d.chain_id || 296})`;
 
       const contractLink = document.getElementById("contractAddressLink");
-      if (d.contract_address) {
-        contractLink.textContent = shorten(d.contract_address, 4);
-        contractLink.href = `https://hashscan.io/testnet/contract/${d.contract_address}`;
-      } else {
-        contractLink.textContent = "Contract: Not Set";
-        contractLink.removeAttribute("href");
+      if (contractLink) {
+        if (d.contract_address) {
+          contractLink.textContent = shorten(d.contract_address, 4);
+          contractLink.href = `https://hashscan.io/testnet/contract/${d.contract_address}`;
+        } else {
+          contractLink.textContent = "Contract: Not Set";
+          contractLink.removeAttribute("href");
+        }
       }
 
       const aiModelEl = document.getElementById("aiModelText");
@@ -1147,6 +1188,7 @@
   });
 
   function updateTriggerBtnState() {
+    if (!kioskSessionSelect || !triggerAttendanceBtn) return;
     const hasSession = kioskSessionSelect.value !== "";
     const hasCam = markStream !== null;
     triggerAttendanceBtn.disabled = !hasSession || !hasCam || isCapturing;
@@ -1180,10 +1222,10 @@
     const remaining = Math.max(0, currentActiveSession.end_time - now);
     const mins = Math.floor(remaining / 60);
     const secs = remaining % 60;
-    kioskCountdown.textContent = `${String(mins).padStart(2, '0')}:${String(secs).padStart(2, '0')}`;
+    if (kioskCountdown) kioskCountdown.textContent = `${String(mins).padStart(2, '0')}:${String(secs).padStart(2, '0')}`;
 
     if (remaining === 0) {
-      kioskCountdown.textContent = "EXPIRED";
+      if (kioskCountdown) kioskCountdown.textContent = "EXPIRED";
       clearInterval(sessionCountdownTimer);
       loadActiveSessions();
     }
@@ -1194,23 +1236,26 @@
       const { ok, data } = await safeFetchJson("/api/sessions?active=1");
       activeSessions = (data && data.sessions) || [];
 
-      document.getElementById("activeSessionCountBadge").textContent = activeSessions.length;
+      const activeBadge = document.getElementById("activeSessionCountBadge");
+      if (activeBadge) activeBadge.textContent = activeSessions.length;
 
       if (activeSessions.length === 0) {
-        kioskSessionSelect.innerHTML = '<option value="">No Active Sessions (Open one in Faculty tab)</option>';
+        if (kioskSessionSelect) kioskSessionSelect.innerHTML = '<option value="">No Active Sessions (Open one in Faculty tab)</option>';
         currentActiveSession = null;
       } else {
-        kioskSessionSelect.innerHTML = '<option value="">-- Select Active Course Session --</option>' +
-          activeSessions.map(s => `<option value="${s.session_id}">#${s.session_id} • ${escapeHtml(s.subject)} (Closes in ${Math.max(0, Math.round((s.end_time - Date.now() / 1000) / 60))}m)</option>`).join("");
+        if (kioskSessionSelect) {
+          kioskSessionSelect.innerHTML = '<option value="">-- Select Active Course Session --</option>' +
+            activeSessions.map(s => `<option value="${s.session_id}">#${s.session_id} • ${escapeHtml(s.subject)} (Closes in ${Math.max(0, Math.round((s.end_time - Date.now() / 1000) / 60))}m)</option>`).join("");
+        }
 
         if (!currentActiveSession && activeSessions.length > 0) {
-          kioskSessionSelect.value = activeSessions[0].session_id;
+          if (kioskSessionSelect) kioskSessionSelect.value = activeSessions[0].session_id;
           currentActiveSession = activeSessions[0];
         }
       }
       updateSessionWidget();
     } catch (e) {
-      kioskSessionSelect.innerHTML = '<option value="">Failed to load sessions</option>';
+      if (kioskSessionSelect) kioskSessionSelect.innerHTML = '<option value="">Failed to load sessions</option>';
     }
     updateTriggerBtnState();
   }
@@ -1520,7 +1565,8 @@
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           session_id: currentActiveSession.session_id,
-          frames: frames
+          frames: frames,
+          location: await getDeviceLocation().catch(() => null)
         })
       });
 
@@ -2661,14 +2707,323 @@
   let modalFaceLockedFrames = 0;
   let modalIsCamPaused = false;
 
+  // =========================================================================
+  // CAMPUS GEOFENCE: attendance only within the campus radius
+  // (the server re-checks every request; this is the student-facing preview)
+  // =========================================================================
+  const modalGeoPanel = document.getElementById("modalGeoPanel");
+  const modalGeoStatusChip = document.getElementById("modalGeoStatusChip");
+  const modalGeoDetail = document.getElementById("modalGeoDetail");
+  const modalGeoMapEl = document.getElementById("modalGeoMap");
+  const modalGeoRecheckBtn = document.getElementById("modalGeoRecheckBtn");
+  const modalGeoCoords = document.getElementById("modalGeoCoords");
+
+  let campusGeofence = null;        // { enabled, name, latitude, longitude, radius_m, max_accuracy_m }
+  let modalGeoAllowed = false;      // result of the latest client-side check
+  let modalGeoLocation = null;      // { latitude, longitude, accuracy, timestamp } — latest live fix from THIS device
+  let modalGeoWatchId = null;       // navigator.geolocation.watchPosition id while the scan window is open
+  let modalGeoTicker = null;        // refreshes the "updated Xs ago" text
+  let modalGeoSession = 0;          // bumps on every (re)start so late callbacks are ignored
+  let modalGeoNeedsFit = true;      // re-frame the map on the first fix after a (re)start
+  let modalGeoLastError = "";
+  let geoMap = null, geoCampusCircle = null, geoCampusDot = null, geoUserDot = null, geoUserAccuracy = null;
+
+  const GEO_FRESH_MS = 20000;       // a live fix older than this is refreshed before scanning
+  const GEO_OPTIONS = { enableHighAccuracy: true, maximumAge: 0, timeout: 20000 };
+
+  async function loadCampusGeofence() {
+    if (campusGeofence) return campusGeofence;
+    const { ok, data } = await safeFetchJson("/api/campus/geofence");
+    if (ok && data && data.geofence) campusGeofence = data.geofence;
+    return campusGeofence;
+  }
+
+  function distanceMeters(lat1, lng1, lat2, lng2) {
+    const R = 6371008.8, rad = Math.PI / 180;
+    const dLat = (lat2 - lat1) * rad, dLng = (lng2 - lng1) * rad;
+    const a = Math.sin(dLat / 2) ** 2 + Math.cos(lat1 * rad) * Math.cos(lat2 * rad) * Math.sin(dLng / 2) ** 2;
+    return 2 * R * Math.asin(Math.min(1, Math.sqrt(a)));
+  }
+
+  function getDeviceLocation() {
+    return new Promise((resolve, reject) => {
+      if (!window.isSecureContext) {
+        reject(new Error("Location needs a secure page. Open the portal over https:// or on http://localhost."));
+        return;
+      }
+      if (!navigator.geolocation) {
+        reject(new Error("This browser does not support location access."));
+        return;
+      }
+      navigator.geolocation.getCurrentPosition(
+        pos => resolve({
+          latitude: pos.coords.latitude,
+          longitude: pos.coords.longitude,
+          accuracy: pos.coords.accuracy
+        }),
+        err => {
+          const msgs = {
+            1: "Location permission was denied. Allow location for this site in your browser settings, then press Re-check.",
+            2: "Your device could not determine its location. Turn on GPS / Location services and try again.",
+            3: "Getting your location took too long. Move near a window or outdoors and press Re-check."
+          };
+          reject(new Error(msgs[err.code] || "Unable to get your location."));
+        },
+        { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 }
+      );
+    });
+  }
+
+  function setGeoStatus(kind, chipText, detailText) {
+    if (modalGeoStatusChip) {
+      modalGeoStatusChip.className = `geo-chip ${kind}`;
+      modalGeoStatusChip.textContent = chipText;
+    }
+    if (modalGeoDetail) modalGeoDetail.textContent = detailText;
+  }
+
+  function refreshScanButtonState() {
+    if (!triggerModalScanBtn) return;
+    triggerModalScanBtn.disabled = modalIsCapturing || !modalGeoAllowed;
+  }
+
+  function describeAge(ts) {
+    const secs = Math.max(0, Math.round((Date.now() - ts) / 1000));
+    if (secs < 3) return "just now";
+    if (secs < 60) return `${secs}s ago`;
+    return `${Math.round(secs / 60)} min ago`;
+  }
+
+  // Shows this device's raw reading so it can be compared with Google Maps on the same device
+  function renderGeoCoords() {
+    if (!modalGeoCoords) return;
+    if (!modalGeoLocation) {
+      modalGeoCoords.innerHTML = "";
+      return;
+    }
+    const { latitude, longitude, accuracy, timestamp } = modalGeoLocation;
+    const lat = latitude.toFixed(6), lng = longitude.toFixed(6);
+    modalGeoCoords.innerHTML =
+      `<span class="geo-live-dot"></span>Live • updated ${describeAge(timestamp)} • ` +
+      `${lat}, ${lng} (±${Math.round(accuracy)} m) • ` +
+      `<a href="https://www.google.com/maps?q=${lat},${lng}" target="_blank" rel="noopener">compare in Google Maps ↗</a>`;
+  }
+
+  function renderGeoMap() {
+    try {
+      drawGeoMap();
+    } catch (e) {
+      // The map is only a visual aid; never let it block the location check
+      console.warn("Campus map could not be drawn:", e);
+    }
+  }
+
+  function drawGeoMap() {
+    if (!modalGeoMapEl || !campusGeofence) return;
+    if (typeof L === "undefined") {
+      modalGeoMapEl.classList.add("unavailable");
+      return;
+    }
+    const center = [campusGeofence.latitude, campusGeofence.longitude];
+    if (!geoMap) {
+      geoMap = L.map(modalGeoMapEl, { zoomControl: true, attributionControl: true, scrollWheelZoom: false })
+        .setView(center, 17);
+      L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", {
+        maxZoom: 19,
+        attribution: '&copy; <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap</a>'
+      }).addTo(geoMap);
+      geoCampusCircle = L.circle(center, {
+        radius: campusGeofence.radius_m, color: "#2F7D5B", weight: 2, fillColor: "#2F7D5B", fillOpacity: 0.12
+      }).addTo(geoMap).bindTooltip(`${campusGeofence.name} • ${Math.round(campusGeofence.radius_m)} m zone`);
+      geoCampusDot = L.circleMarker(center, { radius: 4, color: "#0E1A33", weight: 2, fillColor: "#0E1A33", fillOpacity: 1 }).addTo(geoMap);
+    }
+    geoMap.invalidateSize();
+
+    if (!modalGeoLocation) {
+      if (geoUserDot) { geoMap.removeLayer(geoUserDot); geoUserDot = null; }
+      if (geoUserAccuracy) { geoMap.removeLayer(geoUserAccuracy); geoUserAccuracy = null; }
+      if (modalGeoNeedsFit) geoMap.fitBounds(geoCampusCircle.getBounds(), { padding: [18, 18], animate: false });
+      return;
+    }
+
+    const me = [modalGeoLocation.latitude, modalGeoLocation.longitude];
+    const color = modalGeoAllowed ? "#2F7D5B" : "#A63A2B";
+    // Move the existing markers instead of recreating them, so live updates are smooth
+    if (!geoUserDot) {
+      geoUserAccuracy = L.circle(me, { radius: 0, weight: 1, fillOpacity: 0.08, dashArray: "4 4" }).addTo(geoMap);
+      geoUserDot = L.circleMarker(me, { radius: 7, color: "#ffffff", weight: 2, fillOpacity: 1 })
+        .addTo(geoMap).bindTooltip("You are here (this device)");
+    }
+    geoUserAccuracy.setLatLng(me).setRadius(modalGeoLocation.accuracy || 0).setStyle({ color });
+    geoUserDot.setLatLng(me).setStyle({ fillColor: color });
+
+    // Re-frame on the first fix, or when the student walks out of the visible area
+    if (modalGeoNeedsFit || !geoMap.getBounds().contains(me)) {
+      geoMap.fitBounds(L.latLngBounds([me]).extend(geoCampusCircle.getBounds()), { padding: [18, 18], maxZoom: 18, animate: false });
+      modalGeoNeedsFit = false;
+    }
+  }
+
+  // Decides from the latest fix whether this device is inside the campus zone, and updates the UI
+  function evaluateGeoFix() {
+    const gf = campusGeofence;
+    const loc = modalGeoLocation;
+    modalGeoAllowed = false;
+    if (!gf || !loc) {
+      refreshScanButtonState();
+      return false;
+    }
+    const dist = distanceMeters(loc.latitude, loc.longitude, gf.latitude, gf.longitude);
+    const acc = Math.round(loc.accuracy);
+
+    if (loc.accuracy > gf.max_accuracy_m) {
+      setGeoStatus("warn", `Low accuracy (±${acc} m)`,
+        `Your location is only accurate to about ${acc} m (needs ${Math.round(gf.max_accuracy_m)} m or better). Keep this window open — it updates automatically as the signal improves. Turning on GPS / precise location helps.`);
+    } else if (dist > gf.radius_m) {
+      setGeoStatus("outside", `Outside campus • ${Math.round(dist)} m away`,
+        `You must be within ${Math.round(gf.radius_m)} m of ${gf.name} to mark attendance. Your position updates automatically as you move.`);
+    } else {
+      modalGeoAllowed = true;
+      setGeoStatus("inside", `On campus • ${Math.round(dist)} m`,
+        `You are inside the ${Math.round(gf.radius_m)} m campus zone.`);
+    }
+    renderGeoCoords();
+    renderGeoMap();
+    refreshScanButtonState();
+    return modalGeoAllowed;
+  }
+
+  function onGeoFix(session, pos) {
+    if (session !== modalGeoSession) return;
+    modalGeoLastError = "";
+    modalGeoLocation = {
+      latitude: pos.coords.latitude,
+      longitude: pos.coords.longitude,
+      accuracy: pos.coords.accuracy,
+      timestamp: Date.now()
+    };
+    evaluateGeoFix();
+  }
+
+  function onGeoError(session, err) {
+    if (session !== modalGeoSession) return;
+    const msgs = {
+      1: "Location permission was denied. Allow location for this site in your browser settings, then press Re-check.",
+      2: "Your device could not determine its location. Turn on GPS / Location services; this updates automatically once a signal is found.",
+      3: "Still waiting for a location signal. Move near a window or outdoors; this updates automatically."
+    };
+    modalGeoLastError = msgs[err.code] || "Unable to get your location.";
+    if (err.code === 1) {
+      stopGeoWatch();              // permission denied: watching further is pointless
+      modalGeoSession++;
+      modalGeoLocation = null;
+    }
+    if (modalGeoLocation && err.code !== 1) {
+      // Keep using the last good fix and keep watching; just mention the hiccup
+      if (modalGeoDetail) modalGeoDetail.textContent = modalGeoLastError;
+      return;
+    }
+    modalGeoAllowed = false;
+    setGeoStatus("outside", "Location unavailable", modalGeoLastError);
+    renderGeoCoords();
+    renderGeoMap();
+    refreshScanButtonState();
+  }
+
+  function stopGeoWatch() {
+    if (modalGeoWatchId !== null && navigator.geolocation) navigator.geolocation.clearWatch(modalGeoWatchId);
+    modalGeoWatchId = null;
+    if (modalGeoTicker) {
+      clearInterval(modalGeoTicker);
+      modalGeoTicker = null;
+    }
+  }
+
+  // Starts (or restarts) live tracking of THIS device's location while the scan window is open
+  async function startGeoWatch() {
+    stopGeoWatch();
+    const session = ++modalGeoSession;
+    modalGeoAllowed = false;
+    modalGeoLocation = null;
+    modalGeoNeedsFit = true;
+    refreshScanButtonState();
+
+    const gf = await loadCampusGeofence();
+    if (session !== modalGeoSession) return;
+    if (!gf || !gf.enabled) {
+      if (modalGeoPanel) modalGeoPanel.classList.add("hidden");
+      modalGeoAllowed = true;
+      refreshScanButtonState();
+      return;
+    }
+    if (modalGeoPanel) modalGeoPanel.classList.remove("hidden");
+    setGeoStatus("checking", "Finding your location…", "Allow location access when your browser asks.");
+    renderGeoCoords();
+    renderGeoMap();
+
+    if (!window.isSecureContext) {
+      onGeoError(session, { code: 0 });
+      setGeoStatus("outside", "Location unavailable", "Location needs a secure page. Open the portal over https:// or on http://localhost.");
+      return;
+    }
+    if (!navigator.geolocation) {
+      setGeoStatus("outside", "Location unavailable", "This browser does not support location access.");
+      return;
+    }
+    modalGeoWatchId = navigator.geolocation.watchPosition(
+      pos => onGeoFix(session, pos),
+      err => onGeoError(session, err),
+      GEO_OPTIONS
+    );
+    modalGeoTicker = setInterval(() => {
+      if (session === modalGeoSession) renderGeoCoords();
+    }, 5000);
+  }
+
+  // Used right before scanning: makes sure the fix is fresh, then returns true when on campus.
+  async function checkModalLocation() {
+    const gf = await loadCampusGeofence();
+    if (!gf || !gf.enabled) {
+      modalGeoAllowed = true;
+      return true;
+    }
+    if (modalGeoLocation && Date.now() - modalGeoLocation.timestamp < GEO_FRESH_MS) {
+      return evaluateGeoFix();
+    }
+    const session = modalGeoSession;
+    setGeoStatus("checking", "Refreshing location…", "Getting a fresh location reading before scanning.");
+    try {
+      const loc = await getDeviceLocation();
+      if (session !== modalGeoSession) return false;
+      modalGeoLocation = { ...loc, timestamp: Date.now() };
+      return evaluateGeoFix();
+    } catch (err) {
+      if (session !== modalGeoSession) return false;
+      modalGeoAllowed = false;
+      setGeoStatus("outside", "Location unavailable", err.message);
+      refreshScanButtonState();
+      return false;
+    }
+  }
+
+  if (modalGeoRecheckBtn) {
+    modalGeoRecheckBtn.addEventListener("click", () => {
+      playSound("click");
+      startGeoWatch();
+    });
+  }
+
   async function openStudentFaceScanModal(sessionId, courseTitle) {
     modalScanSessionId = sessionId;
     if (modalCourseTitle) modalCourseTitle.textContent = `Course: ${courseTitle}`;
     if (modalScanResultContainer) modalScanResultContainer.innerHTML = "";
     if (modalScanProgressContainer) modalScanProgressContainer.classList.add("hidden");
-    if (triggerModalScanBtn) triggerModalScanBtn.disabled = false;
     if (studentFaceScanModal) studentFaceScanModal.classList.remove("hidden");
     modalIsCapturing = false;
+    // Scan stays disabled until the campus location check passes
+    modalGeoAllowed = false;
+    refreshScanButtonState();
+    startGeoWatch();
     modalIsTracking = false;
     modalTargetBoxes = [];
     modalCurrentBoxes = [];
@@ -2702,6 +3057,9 @@
 
   function closeStudentFaceScanModal() {
     modalIsTracking = false;
+    stopGeoWatch();              // stop live location tracking when the window closes
+    modalGeoSession++;           // ignore any location callback still in flight
+    modalGeoAllowed = false;
     if (modalTrackInterval) {
       clearInterval(modalTrackInterval);
       modalTrackInterval = null;
@@ -3094,6 +3452,18 @@
       if (!modalScanSessionId || !modalScanVideo || modalIsCapturing) return;
       modalIsCapturing = true;
       triggerModalScanBtn.disabled = true;
+
+      // Fresh location fix right before scanning; stop here if off campus
+      const onCampus = await checkModalLocation();
+      if (!onCampus) {
+        modalIsCapturing = false;
+        refreshScanButtonState();
+        playSound("error");
+        showToast("You must be on campus to mark attendance.", "error");
+        return;
+      }
+      modalIsCapturing = true;
+      triggerModalScanBtn.disabled = true;
       if (modalScanProgressContainer) modalScanProgressContainer.classList.remove("hidden");
       if (modalScanBlinkPrompt) modalScanBlinkPrompt.classList.remove("hidden");
 
@@ -3118,7 +3488,8 @@
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           session_id: modalScanSessionId,
-          frames: frames
+          frames: frames,
+          location: modalGeoLocation
         })
       });
 
@@ -3140,6 +3511,7 @@
             <div style="margin-top:12px; font-size:0.84rem; display:flex; gap:16px; align-items:center; flex-wrap:wrap;">
               <div><strong>Match Score:</strong> ${Math.round(rec.match_score * 100)}%</div>
               <div><strong>Blinks:</strong> ${rec.blink_count}</div>
+              ${rec.distance_m != null ? `<div><strong>On campus:</strong> ${Math.round(rec.distance_m)} m from centre</div>` : ""}
               <div>
                 <a href="${txUrl}" target="_blank" rel="noopener noreferrer" style="color:#ffffff; font-weight:700; text-decoration:underline; display:inline-flex; align-items:center; gap:4px;">
                   View on HashScan Explorer ↗
@@ -3167,6 +3539,14 @@
         } else if (data.verdict === 'already_marked') {
           headline = "Already Marked Present ✓";
           explanation = "Your attendance has already been verified and cryptographically recorded for this session.";
+        } else if (data.verdict === 'identity_mismatch') {
+          headline = "Face Does Not Match Your Account";
+        } else if (data.verdict === 'outside_campus') {
+          headline = "Outside Campus Area";
+        } else if (data.verdict === 'location_required') {
+          headline = "Location Required";
+        } else if (data.verdict === 'location_inaccurate') {
+          headline = "Location Not Precise Enough";
         }
 
         modalScanResultContainer.innerHTML = `
@@ -3180,7 +3560,7 @@
             </div>
           </div>
         `;
-        triggerModalScanBtn.disabled = false;
+        refreshScanButtonState();
       }
     });
   }
@@ -3565,7 +3945,7 @@
       const name = addFacultyName ? addFacultyName.value.trim() : "";
       const email = addFacultyEmail ? addFacultyEmail.value.trim().toLowerCase() : "";
       const dept = addFacultyDept ? addFacultyDept.value.trim() : "Computer Science";
-      const pass = addFacultyPass ? addFacultyPass.value.trim() : "faculty123";
+      const pass = addFacultyPass ? addFacultyPass.value.trim() : "";
 
       if (!name || !email) {
         alert("Please provide both name and institutional email.");

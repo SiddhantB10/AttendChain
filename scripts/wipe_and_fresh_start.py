@@ -31,7 +31,7 @@ logger = logging.getLogger("fresh_start")
 
 def wipe_mongodb():
     mongo_uri = os.getenv("MONGODB_URI")
-    db_name = os.getenv("MONGODB_DB_NAME", "Attendchain")
+    db_name = os.getenv("MONGODB_DB_NAME", "attendchain")
     if not mongo_uri:
         logger.info("No MONGODB_URI set, skipping MongoDB wipe.")
         return
@@ -51,10 +51,10 @@ def wipe_mongodb():
     sess_res = db.sessions.delete_many({})
     logger.info(f"Wiped {sess_res.deleted_count} sessions from MongoDB.")
 
-    att_res = db.attendance.delete_many({})
+    att_res = db.attendance_records.delete_many({})
     logger.info(f"Wiped {att_res.deleted_count} attendance records from MongoDB.")
 
-    ev_res = db.evidence.delete_many({})
+    ev_res = db.evidence_store.delete_many({})
     logger.info(f"Wiped {ev_res.deleted_count} evidence records from MongoDB.")
 
     fr_res = db.face_resets.delete_many({})

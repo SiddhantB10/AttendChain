@@ -5,6 +5,7 @@ Replicates full EVM AttendanceRegistry behavior for offline demos, CI tests, and
 
 import time
 import hashlib
+import logging
 from typing import Dict, Any, Tuple, Optional, List
 from .base import ChainAdapter
 
@@ -44,11 +45,15 @@ class MockChainAdapter(ChainAdapter):
         try:
             # 1. Sync Students
             for st in db.get_all_students():
+                commitment = (st.get("face_commitment") or "").lower()
+                if not commitment:
+                    # Account exists but no face has been enrolled yet: nothing is anchored on-chain
+                    continue
                 s_id = st["student_id"].lower()
                 self.students[s_id] = {
                     "registered": True,
                     "registered_at": st["registered_at"],
-                    "face_commitment": st["face_commitment"].lower()
+                    "face_commitment": commitment
                 }
 
             # 2. Sync Sessions
@@ -74,22 +79,22 @@ class MockChainAdapter(ChainAdapter):
                     self.session_count_val = s_id
 
             # 3. Sync Attendance Records
-            with db._conn() as conn:
-                recs = conn.execute("SELECT session_id, student_id, evidence_hash FROM attendance_records").fetchall()
-                for r in recs:
-                    s_id = r["session_id"]
-                    st_id = r["student_id"].lower()
-                    pair_key = (s_id, st_id)
-                    self.attendance[pair_key] = True
-                    self.evidence_hashes[pair_key] = r["evidence_hash"].lower()
-                    if s_id in self.sessions:
-                        self.sessions[s_id]["present_count"] += 1
-                    if s_id in self.sessions:
-                        sub_hex = self.sessions[s_id]["subject"]
-                        sub_key = (sub_hex, st_id)
-                        self.student_subject_attendance[sub_key] = self.student_subject_attendance.get(sub_key, 0) + 1
-        except Exception:
-            pass
+            # Uses the adapter-neutral API so this works for both SQLite and MongoDB
+            for r in db.get_all_attendance_records():
+                s_id = r["session_id"]
+                st_id = r["student_id"].lower()
+                pair_key = (s_id, st_id)
+                if self.attendance.get(pair_key):
+                    continue
+                self.attendance[pair_key] = True
+                self.evidence_hashes[pair_key] = r["evidence_hash"].lower()
+                if s_id in self.sessions:
+                    self.sessions[s_id]["present_count"] += 1
+                    sub_hex = self.sessions[s_id]["subject"]
+                    sub_key = (sub_hex, st_id)
+                    self.student_subject_attendance[sub_key] = self.student_subject_attendance.get(sub_key, 0) + 1
+        except Exception as e:
+            logging.getLogger("attendchain.mock_chain").warning(f"Mock chain could not fully restore state from database: {e}")
 
     @property
     def mode(self) -> str:

@@ -42,6 +42,11 @@ def run_demo():
     app = create_app(chain_adapter=chain, face_engine=face_engine, db=db)
     client = app.test_client()
 
+    # Device locations used for the campus geofence (see backend/geofence.py)
+    gf = app.geofence
+    ON_CAMPUS = {"latitude": gf.latitude + 0.0003, "longitude": gf.longitude, "accuracy": 15}   # ~33 m from centre
+    OFF_CAMPUS = {"latitude": gf.latitude + 0.0100, "longitude": gf.longitude, "accuracy": 15}  # ~1.1 km away
+
     admin_headers = {"X-Admin-Token": os.getenv("ADMIN_TOKEN", "attendchain-admin-secret-change-me")}
 
     # Step 1: Register 3 Students
@@ -83,8 +88,9 @@ def run_demo():
     # Step 3: Student Marks Attendance (Alice)
     print("\n--- STEP 3: Student Marks Attendance (Face Recognition + Liveness) ---")
     face_engine.set_mock_behavior(verdict=None, similarity=0.892, blinks=2)
-    res = client.post("/api/attendance/mark", json={
+    res = client.post("/api/attendance/mark", headers=admin_headers, json={
         "session_id": session_id,
+        "location": ON_CAMPUS,
         "frames": ["frame_burst_data"] * 30
     })
     assert res.status_code == 200
@@ -97,10 +103,26 @@ def run_demo():
     print(f"      On-Chain Transaction: {rec['tx_hash'][:20]}...")
     print(f"      HashScan Explorer: {rec['explorer_url']}")
 
+    # Step 3b: Refuse marking from outside the campus geofence
+    print("\n--- STEP 3b: Attempting to Mark Attendance From Outside Campus ---")
+    res = client.post("/api/attendance/mark", headers=admin_headers, json={
+        "session_id": session_id,
+        "location": OFF_CAMPUS,
+        "frames": ["frame_burst_data"] * 30
+    })
+    if gf.enabled:
+        assert res.status_code == 403
+        err = res.get_json()
+        print(f" [REFUSED] Status: {res.status_code} ({err['verdict']})")
+        print(f"           Message: {err['error']}")
+    else:
+        print(" [SKIPPED] Campus geofence is disabled (GEOFENCE_ENABLED=false)")
+
     # Step 4: Refuse Double Marking
     print("\n--- STEP 4: Attempting to Mark Attendance Again in Same Session ---")
-    res = client.post("/api/attendance/mark", json={
+    res = client.post("/api/attendance/mark", headers=admin_headers, json={
         "session_id": session_id,
+        "location": ON_CAMPUS,
         "frames": ["frame_burst_data"] * 30
     })
     assert res.status_code == 409
@@ -118,8 +140,9 @@ def run_demo():
     sess2_id = res.get_json()["session"]["session_id"]
 
     face_engine.set_mock_behavior(verdict="no_blink", blinks=0)
-    res = client.post("/api/attendance/mark", json={
+    res = client.post("/api/attendance/mark", headers=admin_headers, json={
         "session_id": sess2_id,
+        "location": ON_CAMPUS,
         "frames": ["static_photo_frames"] * 30
     })
     assert res.status_code == 422
@@ -129,7 +152,7 @@ def run_demo():
 
     # Step 6: "My Attendance" Summary Query
     print("\n--- STEP 6: Querying 'My Attendance' Summary for Alice ---")
-    res = client.get("/api/students/CS101/summary")
+    res = client.get("/api/students/CS101/summary", headers=admin_headers)
     assert res.status_code == 200
     summary = res.get_json()
     print(f" [OK] Student: {summary['student']['name']} ({summary['student']['roll_no']})")

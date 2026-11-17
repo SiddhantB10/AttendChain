@@ -52,7 +52,7 @@ def mark(client, session_id, location):
     body = {"session_id": session_id, "frames": ["f"] * 10}
     if location is not None:
         body["location"] = location
-    return client.post("/api/attendance/mark", json=body)
+    return client.post("/api/attendance/mark", headers=AUTH, json=body)
 
 
 def test_haversine_matches_known_distance():

@@ -25,12 +25,18 @@ if (!CONTRACT_ADDRESS) {
   }
 }
 
-// Load ABI
+// Load ABI: compiled Hardhat artifact first, then the ABI saved alongside the deployment
+// (artifacts/ is git-ignored, so a fresh clone only has deployments/hedera_testnet.json).
 function loadAbi() {
-  const artifactPath = path.join(__dirname, "../artifacts/contracts/AttendanceRegistry.sol/AttendanceRegistry.json");
-  if (fs.existsSync(artifactPath)) {
+  const candidates = [
+    path.join(__dirname, "../artifacts/contracts/AttendanceRegistry.sol/AttendanceRegistry.json"),
+    path.join(__dirname, "../deployments/hedera_testnet.json")
+  ];
+  for (const file of candidates) {
+    if (!fs.existsSync(file)) continue;
     try {
-      return JSON.parse(fs.readFileSync(artifactPath, "utf8")).abi || [];
+      const abi = JSON.parse(fs.readFileSync(file, "utf8")).abi;
+      if (Array.isArray(abi) && abi.length) return abi;
     } catch (e) {}
   }
   return [];
@@ -65,10 +71,12 @@ function toBytes32(hexStr) {
   return "0x" + clean;
 }
 
+// Must stay byte-for-byte identical to Web3ChainAdapter._text_to_bytes32 (trim, upper-case, 32 bytes)
 function subjectToBytes32(subj) {
-  let hex = Buffer.from((subj || "CS301").slice(0, 31), "utf8").toString("hex");
-  hex = hex.padEnd(64, "0");
-  return "0x" + hex;
+  const text = String(subj || "CS301").trim().toUpperCase();
+  if (/^0x[0-9a-fA-F]{64}$/.test(text)) return "0x" + text.slice(2).toLowerCase();
+  const hex = Buffer.from(text, "utf8").subarray(0, 32).toString("hex");
+  return "0x" + hex.padEnd(64, "0");
 }
 
 async function main() {
@@ -187,7 +195,8 @@ async function main() {
       const studentId = toBytes32(payload.student_id);
       const evidenceHash = toBytes32(payload.evidence_hash);
 
-      const tx = await contract.recordAttendance(sessionId, studentId, evidenceHash, { gasLimit: 500000 });
+      // The contract function is markAttendance (there is no recordAttendance in AttendanceRegistry.sol)
+      const tx = await contract.markAttendance(sessionId, studentId, evidenceHash, { gasLimit: 500000 });
       const receipt = await tx.wait();
       console.log(JSON.stringify({ ok: true, tx_hash: receipt.hash }));
       return;
@@ -231,12 +240,34 @@ async function main() {
     if (action === "get_attendance") {
       const sessionId = parseInt(payload.session_id, 10);
       const studentId = toBytes32(payload.student_id);
-      const res = await contract.getAttendance(sessionId, studentId);
+      // AttendanceRegistry exposes hasAttended + getEvidence (there is no getAttendance view)
+      const present = await contract.hasAttended(sessionId, studentId);
+      const evidence = await contract.getEvidence(sessionId, studentId);
       console.log(JSON.stringify({
         ok: true,
-        present: Boolean(res[0]),
-        timestamp: Number(res[1]),
-        evidence_hash: res[2]
+        present: Boolean(present),
+        evidence_hash: evidence
+      }));
+      return;
+    }
+
+    if (action === "get_session_count") {
+      const count = await contract.sessionCount();
+      console.log(JSON.stringify({ ok: true, session_count: Number(count) }));
+      return;
+    }
+
+    if (action === "get_student_summary") {
+      const studentId = toBytes32(payload.student_id);
+      const subj = subjectToBytes32(payload.subject);
+      const total = await contract.totalSessions(subj);
+      const present = await contract.presentSessions(subj, studentId);
+      const pct = await contract.attendancePercent(subj, studentId);
+      console.log(JSON.stringify({
+        ok: true,
+        total_sessions: Number(total),
+        present_sessions: Number(present),
+        attendance_percent: Number(pct)
       }));
       return;
     }

@@ -39,7 +39,9 @@ def download_file(url: str, dest_path: str, description: str, min_size: int):
                 sys.stdout.write(f"\r  Progress: {percent}% ({count * block_size}/{total_size} bytes)")
                 sys.stdout.flush()
 
-        urllib.request.urlretrieve(url, dest_path, reporthook=reporthook)
+        tmp_path = dest_path + ".part"
+        urllib.request.urlretrieve(url, tmp_path, reporthook=reporthook)
+        os.replace(tmp_path, dest_path)
         print("\n  [PASS] Download complete.")
 
         actual_size = os.path.getsize(dest_path)
@@ -77,6 +79,10 @@ def main():
     else:
         print("[NOTICE] Some models could not be downloaded automatically.")
         print("         Follow the manual download instructions above.")
+        if "--strict" in sys.argv:
+            # Used by the Docker build: a missing model must fail the deploy instead of
+            # silently starting the server without real face recognition.
+            sys.exit(1)
 
 if __name__ == "__main__":
     main()

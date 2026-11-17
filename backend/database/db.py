@@ -178,20 +178,8 @@ def init_db(db_path: Optional[str] = None):
         )
 
         # Faculty defaults initialized (no initial groups seeded so faculty can create fresh classes)
-        pass
 
-    # Link existing students into group 1 (CS301) and session 1 if needed
-    try:
-        cursor.execute("SELECT student_id, roll_no FROM students")
-        existing_students = cursor.fetchall()
-        for s in existing_students:
-            cursor.execute(
-                "INSERT OR IGNORE INTO group_enrollments (group_id, student_id, roll_no, enrolled_at) VALUES (1, ?, ?, ?)",
-                (s[0], s[1], 1700000000)
-            )
-        cursor.execute("UPDATE sessions SET group_id = 1 WHERE (group_id = 0 OR group_id IS NULL) AND subject LIKE 'CS301%'")
-    except Exception:
-        pass
+    # Students join course groups only through a faculty invite code (see /api/student/join-group).
 
     conn.commit()
     conn.close()
@@ -233,6 +221,18 @@ def compute_face_commitment(embedding: np.ndarray) -> str:
     """Computes SHA-256 commitment of the L2-normalized float32 embedding bytes."""
     norm_emb = embedding.astype(np.float32).tobytes()
     return f"0x{hashlib.sha256(norm_emb).hexdigest()}"
+
+def decode_embedding(raw: Any) -> np.ndarray:
+    """
+    Decodes a stored embedding blob into a float32 vector.
+    A blob whose length is not a multiple of 4 bytes (a corrupted or tampered template) is
+    still returned as an array instead of raising, so the tamper audit can flag it and
+    face matching can skip it.
+    """
+    data = bytes(raw)
+    if len(data) % 4 == 0:
+        return np.frombuffer(data, dtype=np.float32)
+    return np.frombuffer(data, dtype=np.uint8).astype(np.float32)
 
 def compute_student_id(roll_no: str) -> str:
     """Computes keccak256(rollNo.strip().upper()) returned as 0x-prefixed hex string."""
@@ -284,14 +284,6 @@ class Database:
                 """,
                 (student_id, roll_no, name.strip(), email.strip().lower(), password_hash, now_ts)
             )
-            # Auto-enroll in Core Group 1 (CS301)
-            try:
-                conn.execute(
-                    "INSERT OR IGNORE INTO group_enrollments (group_id, student_id, roll_no, enrolled_at) VALUES (1, ?, ?, ?)",
-                    (student_id, roll_no, now_ts)
-                )
-            except Exception:
-                pass
             conn.commit()
 
             return {
@@ -326,6 +318,15 @@ class Database:
             )
             conn.commit()
             return True
+
+    def update_faculty_password(self, email: str, new_password_hash: str) -> bool:
+        with self._conn() as conn:
+            cur = conn.execute(
+                "UPDATE faculty SET password_hash = ? WHERE LOWER(email) = LOWER(?)",
+                (new_password_hash, email.strip())
+            )
+            conn.commit()
+            return cur.rowcount > 0
 
     def update_student_face(self, student_id: str, face_commitment: str, embedding: np.ndarray) -> bool:
         emb_bytes = embedding.astype(np.float32).tobytes()
@@ -450,7 +451,7 @@ class Database:
             result = []
             for r in rows:
                 if r["embedding"]:
-                    emb = np.frombuffer(r["embedding"], dtype=np.float32)
+                    emb = decode_embedding(r["embedding"])
                     result.append((r["student_id"], r["roll_no"], r["name"], emb))
             return result
 

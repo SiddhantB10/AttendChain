@@ -22,6 +22,7 @@ except ImportError:
     PYMONGO_AVAILABLE = False
 
 from .db import (
+    decode_embedding,
     compute_canonical_evidence,
     compute_face_commitment,
     compute_student_id,
@@ -49,7 +50,9 @@ class MongoDatabase:
             if not self.uri:
                 raise ValueError("MONGODB_URI must be provided or set in environment variables.")
             # Set 5-second server selection timeout for responsive connectivity check
-            self.client = MongoClient(self.uri, serverSelectionTimeoutMS=5000)
+            self.client = MongoClient(self.uri, serverSelectionTimeoutMS=8000)
+            # Fail fast if Atlas is unreachable (wrong URI/password, IP not allowed in Network Access)
+            self.client.admin.command("ping")
 
         self.db = self.client[self.db_name]
         self._init_indexes()
@@ -162,9 +165,7 @@ class MongoDatabase:
             "face_reset_reason": ""
         }
         self.db.students.insert_one(doc)
-
-        # Auto-enroll new student into Core Group 1 (CS301)
-        self.enroll_student_in_group(1, student_id, roll_no)
+        # Students join course groups only through a faculty invite code.
 
         return {
             "student_id": student_id,
@@ -213,7 +214,7 @@ class MongoDatabase:
         return doc
 
     def get_all_students(self) -> List[Dict[str, Any]]:
-        cursor = self.db.students.find({}, {"_id": 0, "embedding": 0}).sort("registered_at", DESCENDING)
+        cursor = self.db.students.find({}, {"_id": 0, "embedding": 0, "password_hash": 0}).sort("registered_at", DESCENDING)
         return list(cursor)
 
     def get_all_embeddings(self) -> List[Tuple[str, str, str, np.ndarray]]:
@@ -230,10 +231,8 @@ class MongoDatabase:
         for r in cursor:
             raw_emb = r.get("embedding")
             if raw_emb:
-                if isinstance(raw_emb, (bytes, bytearray)):
-                    emb = np.frombuffer(raw_emb, dtype=np.float32)
-                elif isinstance(raw_emb, bson.Binary):
-                    emb = np.frombuffer(bytes(raw_emb), dtype=np.float32)
+                if isinstance(raw_emb, (bytes, bytearray, bson.Binary)):
+                    emb = decode_embedding(raw_emb)
                 else:
                     emb = np.array(raw_emb, dtype=np.float32)
                 result.append((r["student_id"], r["roll_no"], r["name"], emb))
@@ -294,6 +293,13 @@ class MongoDatabase:
         )
         return res.matched_count > 0
 
+    def update_faculty_password(self, email: str, new_password_hash: str) -> bool:
+        res = self.db.faculty.update_one(
+            {"email": {"$regex": f"^{re.escape(email.strip())}$", "$options": "i"}},
+            {"$set": {"password_hash": new_password_hash}}
+        )
+        return res.matched_count > 0
+
     def request_face_reset(self, roll_no: str, reason: str = "") -> bool:
         res = self.db.students.update_one(
             {"roll_no": {"$regex": f"^{re.escape(roll_no.strip())}$", "$options": "i"}},
@@ -304,8 +310,8 @@ class MongoDatabase:
     def get_pending_face_resets(self) -> List[Dict[str, Any]]:
         cursor = self.db.students.find(
             {"face_reset_status": "PENDING"},
-            {"_id": 0, "embedding": 0}
-        )
+            {"_id": 0, "embedding": 0, "password_hash": 0}
+        ).sort("registered_at", DESCENDING)
         return list(cursor)
 
     def approve_face_reset(self, roll_no: str) -> bool:
@@ -425,7 +431,11 @@ class MongoDatabase:
 
     def get_attendance_for_session(self, session_id: int) -> List[Dict[str, Any]]:
         cursor = self.db.attendance_records.find({"session_id": session_id}, {"_id": 0}).sort("timestamp", DESCENDING)
-        return list(cursor)
+        records = list(cursor)
+        for r in records:
+            stu = self.get_student_by_id(r.get("student_id", ""))
+            r["name"] = stu.get("name", "") if stu else ""
+        return records
 
     def has_recorded_attendance(self, session_id: int, student_id: str) -> bool:
         count = self.db.attendance_records.count_documents({
@@ -451,11 +461,13 @@ class MongoDatabase:
         for r in records:
             sess = self.db.sessions.find_one({"session_id": r.get("session_id")})
             if sess:
-                grp = self.db.course_groups.find_one({"id": sess.get("group_id")})
+                r["group_id"] = sess.get("group_id")
+                grp = self.get_group_by_id(sess.get("group_id")) if sess.get("group_id") else None
                 if grp:
                     r["subject_code"] = grp.get("subject_code", "")
                     r["group_name"] = grp.get("name", "")
-                    r["faculty_name"] = grp.get("faculty_name", "")
+                    fac = self.get_faculty_by_email(grp.get("faculty_email", ""))
+                    r["faculty_name"] = fac.get("name", "") if fac else ""
         return records
 
     # =========================================================================
@@ -484,7 +496,7 @@ class MongoDatabase:
         return doc
 
     def get_all_faculty(self) -> List[Dict[str, Any]]:
-        cursor = self.db.faculty.find({}, {"_id": 0}).sort("id", ASCENDING)
+        cursor = self.db.faculty.find({}, {"_id": 0, "password_hash": 0}).sort("id", ASCENDING)
         result = []
         for r in cursor:
             # Augment with course count
@@ -492,6 +504,7 @@ class MongoDatabase:
                 "faculty_email": {"$regex": f"^{re.escape(r['email'])}$", "$options": "i"}
             })
             r["course_count"] = c_count
+            r["total_groups"] = c_count
             result.append(r)
         return result
 
@@ -568,6 +581,8 @@ class MongoDatabase:
                 "end_time": {"$gt": now_ts}
             }, {"_id": 0})
 
+            if active_s:
+                active_s["remaining_seconds"] = max(0, active_s.get("end_time", 0) - now_ts)
             g["enrolled_count"] = enrolled_count
             g["enrolled_students_count"] = enrolled_count
             g["total_sessions"] = total_sessions
@@ -588,6 +603,7 @@ class MongoDatabase:
             enrolled = self.db.group_enrollments.count_documents({"group_id": {"$in": id_variants}})
             g["enrolled_count"] = enrolled
             g["enrolled_students_count"] = enrolled
+            g["total_sessions"] = self.db.sessions.count_documents({"group_id": {"$in": id_variants}})
             fac = self.get_faculty_by_email(g.get("faculty_email", ""))
             g["faculty_name"] = fac.get("name", "Prof. Instructor") if fac else "Prof. Instructor"
             result.append(g)

@@ -234,6 +234,8 @@ class OpenCVFaceEngine(FaceEngine):
                 best_sim = -1.0
                 best_id = None
                 for s_id, roll, name, t_emb in enrolled_templates:
+                    if t_emb.shape != sample_emb.shape:
+                        continue  # corrupted / tampered template: never match against it
                     student_meta[s_id] = (roll, name)
                     sim = float(np.dot(sample_emb, t_emb))
                     if sim > best_sim:
@@ -323,6 +325,8 @@ class OpenCVFaceEngine(FaceEngine):
 
             # Check duplicate against existing templates ("one person, one identity")
             for s_id, roll, name, t_emb in existing_templates:
+                if t_emb.shape != final_emb.shape:
+                    continue  # corrupted / tampered template
                 sim = float(np.dot(final_emb, t_emb))
                 if sim >= similarity_threshold:
                     return {

@@ -1,0 +1,85 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 600 680" width="600" height="680">
+  <defs>
+    <linearGradient id="goldGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#F3D785"/>
+      <stop offset="50%" stop-color="#D4AF37"/>
+      <stop offset="100%" stop-color="#A87F1E"/>
+    </linearGradient>
+    <style>
+      @import url('https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@600;700&amp;family=Plus+Jakarta+Sans:wght@400;500&amp;display=swap');
+      .brand-title {
+        font-family: 'Cormorant Garamond', 'Didot', Georgia, serif;
+        font-size: 36px;
+        font-weight: 600;
+        letter-spacing: 5.5px;
+        fill: url(#goldGrad);
+      }
+      .est {
+        font-family: 'Plus Jakarta Sans', Arial, sans-serif;
+        font-size: 13px;
+        font-weight: 400;
+        letter-spacing: 7px;
+        fill: url(#goldGrad);
+      }
+    </style>
+  </defs>
+
+  <!-- Deep Royal Jamun Plum Background -->
+  <rect width="600" height="680" fill="#3D1A3A" rx="14"/>
+
+  <!-- Outer Ornamental Frame -->
+  <rect x="30" y="30" width="540" height="620" fill="none" stroke="url(#goldGrad)" stroke-width="1.2" opacity="0.5"/>
+
+  <!-- Royal Jharokha Arch Frame -->
+  <g transform="translate(300, 75)" fill="none" stroke="url(#goldGrad)" stroke-width="2.2">
+    <!-- Outer Square Arch Box -->
+    <rect x="-155" y="0" width="310" height="390"/>
+    <rect x="-147" y="8" width="294" height="374" stroke-width="1.2"/>
+
+    <!-- Multi-Cusp Mughal/Rajasthani Jharokha Arch -->
+    <path d="M-125,382 L-125,210 
+             C-125,180 -105,165 -105,145
+             C-105,125 -80,115 -75,95
+             C-70,75 -35,65 0,32
+             C35,65 70,75 75,95
+             C80,115 105,125 105,145
+             C105,165 125,180 125,210
+             L125,382" stroke-width="2.4"/>
+
+    <!-- Inner Echo Arch -->
+    <path d="M-112,382 L-112,214 
+             C-112,186 -94,172 -94,152
+             C-94,132 -70,122 -65,104
+             C-60,84 -28,74 0,46
+             C28,74 60,84 65,104
+             C70,122 94,132 94,152
+             C94,172 112,186 112,214
+             L112,382" stroke-width="1.2"/>
+
+    <!-- Hanging Festive Lantern (Kandeel) -->
+    <line x1="0" y1="46" x2="0" y2="155" stroke-width="1.8"/>
+    <circle cx="0" cy="160" r="5" fill="url(#goldGrad)"/>
+    <!-- Lantern Dome -->
+    <path d="M-24,185 C-20,168 20,168 24,185 Z"/>
+    <!-- Lantern Body -->
+    <rect x="-28" y="185" width="56" height="65"/>
+    <line x1="-14" y1="185" x2="-14" y2="250" stroke-width="1.2"/>
+    <line x1="14" y1="185" x2="14" y2="250" stroke-width="1.2"/>
+    <!-- Inner Flame/Sparkle inside Lantern -->
+    <path d="M0,202 C2,212 4,214 14,216 C4,218 2,220 0,230 C-2,220 -4,218 -14,216 C-4,214 -2,212 0,202 Z" fill="url(#goldGrad)" stroke="none"/>
+    <!-- Lantern Base & Tassel -->
+    <path d="M-24,250 L0,275 L24,250 Z"/>
+    <circle cx="0" cy="282" r="4" fill="url(#goldGrad)"/>
+
+    <!-- Twinkling Stars Around Lantern -->
+    <path d="M-55,175 C-54,180 -52,182 -47,183 C-52,184 -54,186 -55,191 C-56,186 -58,184 -63,183 C-58,182 -56,180 -55,175 Z" fill="url(#goldGrad)" stroke="none"/>
+    <path d="M58,195 C59,200 61,202 66,203 C61,204 59,206 58,211 C57,206 55,204 50,203 C55,202 57,200 58,195 Z" fill="url(#goldGrad)" stroke="none"/>
+    <circle cx="-48" cy="245" r="2.5" fill="url(#goldGrad)" stroke="none"/>
+    <circle cx="48" cy="255" r="2.5" fill="url(#goldGrad)" stroke="none"/>
+  </g>
+
+  <!-- Brand Name & Est Year -->
+  <text x="303" y="535" text-anchor="middle" class="brand-title">HOUSE OF SAHELII</text>
+  <text x="304" y="575" text-anchor="middle" class="est">EST. 2026</text>
+  <text x="303" y="612" text-anchor="middle" class="est" style="font-size:10.5px; letter-spacing:5px; opacity:0.8;">DECOR • LIGHTS • JEWELS • GIFTS</text>
+</svg>

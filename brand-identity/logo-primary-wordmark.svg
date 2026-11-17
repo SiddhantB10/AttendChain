@@ -1,0 +1,74 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 900 320" width="900" height="320">
+  <defs>
+    <linearGradient id="goldGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#E5C158"/>
+      <stop offset="50%" stop-color="#D4AF37"/>
+      <stop offset="100%" stop-color="#AA8220"/>
+    </linearGradient>
+    <style>
+      @import url('https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@600;700&amp;family=Plus+Jakarta+Sans:wght@400;500&amp;display=swap');
+      .house-of {
+        font-family: 'Plus Jakarta Sans', 'Helvetica Neue', Arial, sans-serif;
+        font-size: 20px;
+        font-weight: 500;
+        letter-spacing: 14px;
+        fill: #3D1A3A;
+      }
+      .sahelii {
+        font-family: 'Cormorant Garamond', 'Didot', 'Playfair Display', Georgia, serif;
+        font-size: 112px;
+        font-weight: 600;
+        letter-spacing: 8px;
+        fill: #3D1A3A;
+      }
+      .tagline {
+        font-family: 'Plus Jakarta Sans', 'Helvetica Neue', Arial, sans-serif;
+        font-size: 13px;
+        font-weight: 500;
+        letter-spacing: 7px;
+        fill: #5C3258;
+      }
+    </style>
+  </defs>
+
+  <!-- Warm Ivory Background -->
+  <rect width="900" height="320" fill="#FAF6F0" rx="8"/>
+
+  <!-- Subtle Outer Gold Hairline Frame -->
+  <rect x="18" y="18" width="864" height="284" fill="none" stroke="url(#goldGrad)" stroke-width="1" opacity="0.55" rx="4"/>
+
+  <!-- Top Lotus & Twin Sparkle Crown Motif -->
+  <g transform="translate(450, 48)">
+    <!-- Center 4-point sparkle -->
+    <path d="M0,-18 C2,-5 5,-2 18,0 C5,2 2,5 0,18 C-2,5 -5,2 -18,0 C-5,-2 -2,-5 0,-18 Z" fill="url(#goldGrad)"/>
+    <!-- Left & Right mini sparkles (symbolizing twin Sahelis) -->
+    <path d="M-36,-4 C-35,0 -34,1 -30,2 C-34,3 -35,4 -36,8 C-37,4 -38,3 -42,2 C-38,1 -37,0 -36,-4 Z" fill="url(#goldGrad)"/>
+    <path d="M36,-4 C37,0 38,1 42,2 C38,3 37,4 36,8 C35,4 34,3 30,2 C34,1 35,0 36,-4 Z" fill="url(#goldGrad)"/>
+  </g>
+
+  <!-- HOUSE OF -->
+  <text x="457" y="102" text-anchor="middle" class="house-of">HOUSE OF</text>
+
+  <!-- SAHELII -->
+  <text x="454" y="205" text-anchor="middle" class="sahelii">SAHELII</text>
+
+  <!-- Signature Golden Sparkle & Lotus Petal Accent above the Twin II's -->
+  <g transform="translate(658, 102)">
+    <!-- 4-point star above first I -->
+    <path d="M0,-20 C2.5,-5 5,-2.5 20,0 C5,2.5 2.5,5 0,20 C-2.5,5 -5,2.5 -20,0 C-5,-2.5 -2.5,-5 0,-20 Z" fill="url(#goldGrad)"/>
+    <!-- Three lotus petals above second I -->
+    <g transform="translate(30, 8)">
+      <path d="M0,-14 C4,-7 4,0 0,5 C-4,0 -4,-7 0,-14 Z" fill="url(#goldGrad)"/>
+      <path d="M-4,4 C-11,1 -14,-5 -11,-10 C-6,-7 -3,-2 -4,4 Z" fill="url(#goldGrad)"/>
+      <path d="M4,4 C11,1 14,-5 11,-10 C6,-7 3,-2 4,4 Z" fill="url(#goldGrad)"/>
+    </g>
+  </g>
+
+  <!-- Gold Divider Line with Center Diamond -->
+  <line x1="250" y1="234" x2="438" y2="234" stroke="url(#goldGrad)" stroke-width="1.2"/>
+  <polygon points="450,229 455,234 450,239 445,234" fill="url(#goldGrad)"/>
+  <line x1="462" y1="234" x2="650" y2="234" stroke="url(#goldGrad)" stroke-width="1.2"/>
+
+  <!-- Tagline -->
+  <text x="453" y="266" text-anchor="middle" class="tagline">CURATED DECOR  •  JEWELS  •  GIFTING</text>
+</svg>

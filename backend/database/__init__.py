@@ -29,6 +29,9 @@ def get_database(backend: Optional[str] = None) -> Any:
             logger.info(f"Connecting to MongoDB Atlas database '{db_name}'...")
             return MongoDatabase(uri=mongo_uri, db_name=db_name)
         except Exception as e:
+            if os.getenv("APP_ENV", "").strip().lower() in ("production", "prod"):
+                # Never fall back to a local file on a cloud host: it is wiped on every restart.
+                raise RuntimeError(f"Could not connect to MongoDB ({e}). Check MONGODB_URI and Atlas Network Access.") from e
             logger.error(f"Failed to connect to MongoDB Atlas: {e}. Falling back to SQLite.")
 
     # Default to SQLite

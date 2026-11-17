@@ -4,8 +4,9 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>AttendChain™ ERP — University Biometric Academic Registry</title>
-  <link rel="stylesheet" href="/tokens.css?v=20261113_20">
-  <link rel="stylesheet" href="/styles.css?v=20261113_20">
+  <link rel="stylesheet" href="/tokens.css?v=20261117_01">
+  <link rel="stylesheet" href="/vendor/leaflet/leaflet.css?v=1.9.4">
+  <link rel="stylesheet" href="/styles.css?v=20261117_01">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,400;0,9..144,600;0,9..144,700;0,9..144,800;1,9..144,400&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
@@ -217,8 +218,8 @@
                 New student? <a href="#" id="linkToSignUp" style="color: var(--text-coral); font-weight: 700; text-decoration: none;">Create an account</a>
               </p>
 
-              <!-- Quick Login Fillers -->
-              <div class="quick-demo-row" style="margin-top: 18px; justify-content: center;">
+              <!-- Quick Login Fillers (development only: shown when the server reports demo_logins) -->
+              <div class="quick-demo-row" id="quickDemoRow" style="margin-top: 18px; justify-content: center; display: none;">
                 <span style="font-size:0.75rem; color:var(--text-muted); font-weight:700; width:100%; text-align: center;">Quick Access:</span>
                 <button type="button" class="quick-demo-pill" id="quickDemoStudentBtn">
                   Student (AC001 / siddhant)
@@ -979,6 +980,23 @@
           </div>
         </div>
 
+        <!-- Campus Geofence Check -->
+        <div id="modalGeoPanel" class="geo-panel">
+          <div class="geo-panel-head">
+            <div class="geo-panel-title">
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"></path><circle cx="12" cy="10" r="3"></circle></svg>
+              <span>Campus Location Check</span>
+            </div>
+            <span id="modalGeoStatusChip" class="geo-chip checking">Checking location…</span>
+          </div>
+          <div id="modalGeoMap" class="geo-map" aria-label="Map of campus area and your location"></div>
+          <div id="modalGeoCoords" class="geo-coords" aria-live="polite"></div>
+          <div class="geo-panel-foot">
+            <span id="modalGeoDetail" class="geo-detail">Allow location access when your browser asks.</span>
+            <button id="modalGeoRecheckBtn" class="link-btn geo-recheck-btn" type="button">Re-check location</button>
+          </div>
+        </div>
+
         <!-- Controls Bar Below Viewfinder -->
         <div class="kiosk-controls-bar" style="margin-bottom: 16px;">
           <button id="modalPauseCamBtn" class="btn-secondary-action" type="button" style="flex: 1;">
@@ -1115,7 +1133,7 @@
 
         <div class="form-field-group">
           <label for="addFacultyPass" class="form-label">Initial Password:</label>
-          <input type="password" id="addFacultyPass" class="text-input-control" value="faculty123">
+          <input type="password" id="addFacultyPass" class="text-input-control" value="" placeholder="At least 8 characters" autocomplete="new-password" minlength="8">
         </div>
 
         <div id="addFacultyAlert" class="alert-callout-box hidden"></div>
@@ -1245,6 +1263,7 @@
   </div>
 
   <!-- Main Application Logic (Placed at end of body so all modals are in DOM) -->
-  <script src="/app.js?v=20261113_20"></script>
+  <script src="/vendor/leaflet/leaflet.js?v=1.9.4"></script>
+  <script src="/app.js?v=20261117_01"></script>
 </body>
 </html>

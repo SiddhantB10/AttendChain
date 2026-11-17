@@ -2422,3 +2422,91 @@ button *,
     transform: translateX(0) scale(1);
   }
 }
+
+
+/* ==========================================================================
+   Campus geofence panel (attendance scan modal)
+   ========================================================================== */
+.geo-panel {
+  border: 1px solid var(--cream-300);
+  border-radius: var(--radius);
+  background: var(--cream-50);
+  padding: 10px 12px;
+  margin-bottom: 16px;
+}
+.geo-panel.hidden { display: none; }
+.geo-panel-head,
+.geo-panel-foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+.geo-panel-title {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.84rem;
+  font-weight: 700;
+  color: var(--navy-900);
+}
+.geo-chip {
+  font-size: 0.74rem;
+  font-weight: 700;
+  padding: 3px 10px;
+  border-radius: 999px;
+  border: 1px solid currentColor;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.geo-chip.checking { color: var(--navy-500); }
+.geo-chip.inside   { color: var(--status-present); background: rgba(47, 125, 91, 0.08); }
+.geo-chip.outside  { color: var(--status-absent);  background: rgba(166, 58, 43, 0.08); }
+.geo-chip.warn     { color: var(--status-late);    background: rgba(183, 121, 31, 0.08); }
+.geo-map {
+  height: 170px;
+  margin: 10px 0 8px;
+  border-radius: var(--radius);
+  border: 1px solid var(--cream-300);
+  background: var(--cream-100);
+  overflow: hidden;
+  position: relative;
+  z-index: 0;
+}
+.geo-map.unavailable { display: none; }
+.geo-coords {
+  font-size: 0.72rem;
+  font-family: var(--font-mono);
+  color: var(--navy-500);
+  margin: -2px 0 8px;
+  line-height: 1.5;
+  word-break: break-word;
+}
+.geo-coords:empty { display: none; }
+.geo-coords a { color: var(--coral-700); font-weight: 600; }
+.geo-live-dot {
+  display: inline-block;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--status-present);
+  margin-right: 6px;
+  vertical-align: 1px;
+  animation: geoLivePulse 1.6s ease-in-out infinite;
+}
+@keyframes geoLivePulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.25; }
+}
+.geo-detail {
+  font-size: 0.78rem;
+  color: var(--navy-500);
+  line-height: 1.4;
+  flex: 1 1 220px;
+}
+.geo-recheck-btn {
+  font-size: 0.78rem;
+  font-weight: 700;
+  color: var(--coral-700);
+}

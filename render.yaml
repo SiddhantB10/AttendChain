@@ -1,0 +1,68 @@
+# Render Blueprint for the AttendChain API.
+# Render dashboard -> New -> Blueprint -> pick this repository.
+# Variables marked "sync: false" are secrets: Render asks you to type them in during setup.
+services:
+  - type: web
+    name: attendchain-api
+    runtime: docker
+    dockerfilePath: ./Dockerfile
+    plan: free            # change to "starter" ($7/mo) to avoid the 15-minute sleep
+    region: singapore     # closest Render region to Mumbai
+    healthCheckPath: /api/healthz
+    autoDeploy: true
+    envVars:
+      # --- Server ---
+      - key: APP_ENV
+        value: production
+      - key: SECRET_KEY            # signs login sessions
+        generateValue: true
+      - key: ADMIN_TOKEN           # API token for scripts (the web app never uses it)
+        generateValue: true
+      - key: SESSION_HOURS
+        value: "12"
+
+      # --- Accounts ---
+      - key: ADMIN_EMAIL
+        value: admin@attendchain.edu
+      - key: ADMIN_PASSWORD        # central admin sign-in password (10+ characters)
+        sync: false
+      - key: FACULTY_PASSWORD      # replaces the public demo password "faculty123" of seeded faculty accounts
+        sync: false
+
+      # --- Database (MongoDB Atlas; Render's disk is wiped on every restart) ---
+      - key: DATABASE_BACKEND
+        value: mongodb
+      - key: MONGODB_URI
+        sync: false
+      - key: MONGODB_DB_NAME
+        value: Attendchain
+
+      # --- Hedera testnet ---
+      - key: CHAIN_MODE
+        value: hedera
+      - key: HEDERA_RPC_URL
+        value: https://testnet.hashio.io/api
+      - key: HEDERA_CHAIN_ID
+        value: "296"
+      - key: CONTRACT_ADDRESS
+        value: "0x10337f8b29CE1F072bac09Ff62F88b7b3CF9f77a"
+      - key: FACULTY_PRIVATE_KEY   # ECDSA key of the deployer/faculty wallet
+        sync: false
+
+      # --- Attendance rules ---
+      - key: MIN_ATTENDANCE_PERCENT
+        value: "75"
+      - key: FACE_SIMILARITY_THRESHOLD
+        value: "0.363"
+      - key: GEOFENCE_ENABLED
+        value: "true"
+      - key: CAMPUS_NAME
+        value: VESIT Campus, Chembur
+      - key: CAMPUS_LATITUDE
+        value: "19.0458788"
+      - key: CAMPUS_LONGITUDE
+        value: "72.8892847"
+      - key: CAMPUS_RADIUS_METERS
+        value: "150"
+      - key: GEOFENCE_MAX_ACCURACY_METERS
+        value: "100"

@@ -95,7 +95,7 @@ class HederaNodeBridgeAdapter(ChainAdapter):
     def get_student(self, student_id_hex: str) -> Dict[str, Any]:
         res = self._call_bridge("get_student", {"student_id": student_id_hex})
         if not res.get("ok"):
-            return {"registered": False, "registered_at": 0, "face_commitment": "0x0"}
+            return {"registered": False, "registered_at": 0, "face_commitment": "0x" + "00" * 32}
         return {
             "registered": res.get("registered", False),
             "registered_at": res.get("registered_at", 0),
@@ -137,7 +137,8 @@ class HederaNodeBridgeAdapter(ChainAdapter):
         return res.get("active", False)
 
     def get_session_count(self) -> int:
-        return 1
+        res = self._call_bridge("get_session_count")
+        return int(res.get("session_count", 0)) if res.get("ok") else 0
 
     def mark_attendance(self, session_id: int, student_id_hex: str, evidence_hash_hex: str) -> str:
         res = self._call_bridge("record_attendance", {
@@ -161,13 +162,19 @@ class HederaNodeBridgeAdapter(ChainAdapter):
             "session_id": session_id,
             "student_id": student_id_hex
         })
-        return res.get("evidence_hash", "")
+        return res.get("evidence_hash") or ("0x" + "00" * 32)
 
     def get_student_summary(self, student_id_hex: str, subject_str: str) -> Dict[str, Any]:
+        res = self._call_bridge("get_student_summary", {
+            "student_id": student_id_hex,
+            "subject": subject_str
+        })
+        if not res.get("ok"):
+            return {"total_sessions": 0, "present_sessions": 0, "attendance_percent": 0}
         return {
-            "total_sessions": 0,
-            "present_sessions": 0,
-            "attendance_percent": 100
+            "total_sessions": int(res.get("total_sessions", 0)),
+            "present_sessions": int(res.get("present_sessions", 0)),
+            "attendance_percent": int(res.get("attendance_percent", 0))
         }
 
     def get_explorer_tx_url(self, tx_hash: str) -> str:

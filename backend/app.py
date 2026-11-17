@@ -12,12 +12,13 @@ import base64
 import logging
 import io
 import csv
+import re
 import threading
-from typing import List, Dict, Any, Optional
+from typing import List, Dict, Any, Optional, Tuple
 
 import numpy as np
 import cv2
-from flask import Flask, request, jsonify, send_file, send_from_directory
+from flask import Flask, request, jsonify, send_file, send_from_directory, g
 from werkzeug.exceptions import HTTPException
 from flask_cors import CORS
 from dotenv import load_dotenv
@@ -34,28 +35,90 @@ from backend.database import (
 )
 from backend.chain import get_chain_adapter
 from backend.ai.face_engine import FaceEngine, OpenCVFaceEngine, MockFaceEngine
+from backend.geofence import GeofenceConfig
+from backend.auth import (
+    DEFAULT_ADMIN_TOKEN,
+    DEMO_DEFAULT_PASSWORDS,
+    LoginRateLimiter,
+    SessionTokens,
+    constant_time_equals,
+    hash_password,
+    is_hashed,
+    is_production,
+    load_secret_key,
+    verify_password,
+)
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
 logger = logging.getLogger("AttendChain")
 
-# Security warning for default admin token
-DEFAULT_ADMIN_TOKEN = "attendchain-admin-secret-change-me"
-configured_token = os.getenv("ADMIN_TOKEN", DEFAULT_ADMIN_TOKEN)
-DEFAULT_ADMIN_EMAIL = os.getenv("ADMIN_EMAIL", "admin@attendchain.edu").strip().lower()
-DEFAULT_ADMIN_PASSWORD = os.getenv("ADMIN_PASSWORD", "Admin@AttendChain2026").strip()
+# Development-only fallback for the central admin password (production requires ADMIN_PASSWORD)
+DEV_ADMIN_PASSWORD = "Admin@AttendChain2026"
 
-if configured_token == DEFAULT_ADMIN_TOKEN:
-    logger.warning("=" * 70)
-    logger.warning("SECURITY WARNING: You are running with the default ADMIN_TOKEN!")
-    logger.warning("Set a secure ADMIN_TOKEN in your .env file before production deployment.")
-    logger.warning("=" * 70)
 
-def create_app(chain_adapter=None, face_engine=None, db=None, auto_init_session: bool = False) -> Flask:
+def check_production_config() -> None:
+    """Refuses to start a production server with missing or insecure settings."""
+    problems = []
+    if len(os.getenv("SECRET_KEY", "").strip()) < 32:
+        problems.append("SECRET_KEY must be set to a random string of at least 32 characters.")
+    if len(os.getenv("ADMIN_PASSWORD", "").strip()) < 10:
+        problems.append("ADMIN_PASSWORD must be set (at least 10 characters).")
+    token = os.getenv("ADMIN_TOKEN", "").strip()
+    if token and (token == DEFAULT_ADMIN_TOKEN or len(token) < 24):
+        problems.append("ADMIN_TOKEN must be a random string of at least 24 characters (or left unset to disable it).")
+    backend = os.getenv("DATABASE_BACKEND", "sqlite").strip().lower()
+    if backend != "mongodb" and os.getenv("ALLOW_EPHEMERAL_SQLITE", "").strip().lower() != "true":
+        problems.append("DATABASE_BACKEND must be 'mongodb' in production: cloud hosts wipe local SQLite files "
+                        "on every restart. (Set ALLOW_EPHEMERAL_SQLITE=true to override.)")
+    if backend == "mongodb" and not os.getenv("MONGODB_URI", "").strip():
+        problems.append("MONGODB_URI is required when DATABASE_BACKEND=mongodb.")
+    if problems:
+        raise RuntimeError("Production configuration is not safe to start:\n  - " + "\n  - ".join(problems))
+
+
+def _rotate_demo_faculty_passwords(db, new_password: str) -> None:
+    """Replaces the seeded demo faculty password with FACULTY_PASSWORD (hashed), if that is set."""
+    if not new_password:
+        return
+    try:
+        for fac in db.get_all_faculty():
+            full = db.get_faculty_by_email(fac["email"]) or {}
+            stored = full.get("password_hash") or ""
+            if not is_hashed(stored) and stored in DEMO_DEFAULT_PASSWORDS:
+                db.update_faculty_password(fac["email"], hash_password(new_password))
+                logger.info(f"Replaced demo password for faculty account {fac['email']}.")
+    except Exception as e:
+        logger.warning(f"Could not rotate demo faculty passwords: {e}")
+
+
+def create_app(chain_adapter=None, face_engine=None, db=None, auto_init_session: bool = False,
+               geofence: Optional[GeofenceConfig] = None) -> Flask:
     app = Flask(__name__, static_folder="static", static_url_path="")
-    CORS(app)
+    production = is_production()
+    if production:
+        check_production_config()
+
+    # CORS: the deployed frontend reaches the API through a same-origin proxy (Vercel rewrite),
+    # so cross-origin access is only opened for origins listed in CORS_ORIGINS.
+    cors_origins = [o.strip().rstrip("/") for o in os.getenv("CORS_ORIGINS", "").split(",") if o.strip()]
+    if cors_origins:
+        CORS(app, resources={r"/api/*": {"origins": cors_origins}})
+    elif not production:
+        CORS(app)
+
+    # Sessions: signed, expiring tokens issued at login
+    app.tokens = SessionTokens(load_secret_key(), int(float(os.getenv("SESSION_HOURS", "12")) * 3600))
+    app.login_limiter = LoginRateLimiter()
 
     # 16 MB max payload limit
     app.config["MAX_CONTENT_LENGTH"] = 16 * 1024 * 1024
+
+    @app.after_request
+    def set_security_headers(response):
+        response.headers.setdefault("X-Content-Type-Options", "nosniff")
+        response.headers.setdefault("Referrer-Policy", "strict-origin-when-cross-origin")
+        response.headers.setdefault("X-Frame-Options", "DENY")
+        return response
 
     @app.after_request
     def set_cache_headers(response):
@@ -88,8 +151,36 @@ def create_app(chain_adapter=None, face_engine=None, db=None, auto_init_session:
         else:
             logger.info("OpenCV model files not found. Using MockFaceEngine.")
             app.face_engine = MockFaceEngine()
+        if production and isinstance(app.face_engine, MockFaceEngine) \
+                and os.getenv("ALLOW_MOCK_FACE_ENGINE", "").strip().lower() != "true":
+            # The mock engine accepts any face. Never serve real attendance with it.
+            raise RuntimeError("Face recognition models are missing or failed to load, so the server would fall back to the "
+                               "mock face engine. Run 'python scripts/download_models.py --strict' during the build.")
 
-    admin_token = os.getenv("ADMIN_TOKEN", DEFAULT_ADMIN_TOKEN)
+    if production and getattr(app.chain, "mode", "") == "mock":
+        logger.warning("CHAIN_MODE=mock in production: attendance is NOT written to Hedera. Set CHAIN_MODE=hedera.")
+
+    # Campus geofence: attendance is only accepted from inside the campus radius
+    app.geofence = geofence or GeofenceConfig.from_env()
+    if app.geofence.enabled:
+        logger.info(f"Campus geofence ON: {app.geofence.name} ({app.geofence.latitude}, {app.geofence.longitude}), "
+                    f"radius {app.geofence.radius_m} m")
+    else:
+        logger.warning("Campus geofence is DISABLED (GEOFENCE_ENABLED=false): attendance accepted from any location.")
+
+    # Static API token for scripts / server-to-server admin calls (X-Admin-Token header).
+    # The web UI never receives it; people sign in and get a personal session token instead.
+    admin_token = os.getenv("ADMIN_TOKEN", "").strip()
+    if not admin_token and not production:
+        admin_token = DEFAULT_ADMIN_TOKEN
+    if admin_token == DEFAULT_ADMIN_TOKEN:
+        logger.warning("Using the default ADMIN_TOKEN (development only). Set ADMIN_TOKEN before deploying.")
+
+    admin_email = os.getenv("ADMIN_EMAIL", "admin@attendchain.edu").strip().lower()
+    admin_password = os.getenv("ADMIN_PASSWORD", "").strip() or ("" if production else DEV_ADMIN_PASSWORD)
+
+    # Optional: replace the seeded demo faculty password ("faculty123") with FACULTY_PASSWORD
+    _rotate_demo_faculty_passwords(app.db, os.getenv("FACULTY_PASSWORD", "").strip())
 
     # Auto-initialize an active session if none exists so attendance can be marked out-of-the-box
     if auto_init_session:
@@ -113,13 +204,95 @@ def create_app(chain_adapter=None, face_engine=None, db=None, auto_init_session:
         except Exception as e:
             logger.warning(f"Could not auto-initialize session: {e}")
 
-    def verify_admin_auth():
-        token = request.headers.get("X-Admin-Token", "")
-        if not token:
+    def current_identity() -> Optional[Dict[str, Any]]:
+        """Who is calling: {"role": admin|faculty|student, "sub": email/roll, "name"} or None."""
+        auth_header = request.headers.get("Authorization", "")
+        if auth_header.lower().startswith("bearer "):
+            ident = app.tokens.verify(auth_header[7:].strip())
+            if ident:
+                return ident
+        x_token = request.headers.get("X-Admin-Token", "").strip()
+        if x_token:
+            if admin_token and constant_time_equals(x_token, admin_token):
+                return {"role": "admin", "sub": "api-token", "name": "API token"}
+            ident = app.tokens.verify(x_token)
+            if ident:
+                return ident
+        return None
+
+    def ident() -> Optional[Dict[str, Any]]:
+        return getattr(g, "identity", None)
+
+    def verify_admin_auth() -> bool:
+        who = ident() if hasattr(g, "identity") else current_identity()
+        return bool(who and who["role"] == "admin")
+
+    def verify_staff_auth() -> bool:
+        who = ident() if hasattr(g, "identity") else current_identity()
+        return bool(who and who["role"] in ("admin", "faculty"))
+
+    def faculty_may_manage_group(group: Optional[Dict[str, Any]]) -> bool:
+        who = ident()
+        if not who:
             return False
-        if hmac.compare_digest(token, admin_token) or hmac.compare_digest(token, DEFAULT_ADMIN_TOKEN):
+        if who["role"] == "admin":
             return True
-        return False
+        return bool(group) and who["role"] == "faculty" and \
+            str(group.get("faculty_email", "")).strip().lower() == who["sub"].lower()
+
+    def auth_error(status: int, message: str):
+        return jsonify({"ok": False, "error": message, "verdict": "unauthorized" if status == 401 else "forbidden"}), status
+
+    PUBLIC_API = {
+        "/api/health", "/api/healthz", "/api/campus/geofence", "/api/students/next-roll",
+    }
+    STAFF_PATHS = re.compile(
+        r"^/api/(audit|students|students/register|sessions(/\d+/(close|attendance|attendance\.csv))?)$"
+    )
+    STUDENT_OWN = re.compile(r"^/api/student/([^/]+)/")
+    STUDENT_SUMMARY = re.compile(r"^/api/students/([^/]+)/summary$")
+
+    @app.before_request
+    def enforce_access_policy():
+        """
+        Central access rules for every /api route:
+          public  -> health, geofence, sign-in/sign-up, session list
+          admin   -> everything
+          faculty -> /api/faculty/* (own groups, checked in the route) + staff tools (audit, sessions, roster)
+          student -> only their own /api/student/<roll>/... data, joining groups, marking attendance
+        """
+        path = request.path
+        if request.method == "OPTIONS" or not path.startswith("/api/"):
+            return None
+        g.identity = current_identity()
+        if path in PUBLIC_API or path.startswith("/api/auth/") or (path == "/api/sessions" and request.method == "GET"):
+            return None
+
+        who = g.identity
+        if who is None:
+            return auth_error(401, "Please sign in to continue.")
+        role = who["role"]
+        if role == "admin":
+            return None
+        if path.startswith("/api/admin/"):
+            return auth_error(403, "Admin privileges required.")
+        if path in ("/api/attendance/mark", "/api/face/track"):
+            return None
+        if path.startswith("/api/faculty/") or STAFF_PATHS.match(path):
+            return None if role == "faculty" else auth_error(403, "Faculty privileges required.")
+        if path == "/api/student/join-group":
+            return None if role == "student" else auth_error(403, "Only students can join a course.")
+        m = STUDENT_OWN.match(path)
+        if m:
+            if role == "student" and m.group(1).upper() == who["sub"].upper():
+                return None
+            return auth_error(403, "You can only access your own student account.")
+        m = STUDENT_SUMMARY.match(path)
+        if m:
+            if role == "faculty" or (role == "student" and m.group(1).upper() == who["sub"].upper()):
+                return None
+            return auth_error(403, "You can only access your own attendance summary.")
+        return auth_error(403, "You do not have access to this resource.")
 
     def decode_frames(base64_frames: List[str]) -> List[np.ndarray]:
         frames = []
@@ -141,321 +314,195 @@ def create_app(chain_adapter=None, face_engine=None, db=None, auto_init_session:
     def index():
         return send_from_directory(app.static_folder, "index.html")
 
-    # --- Unified Single Authentication & Signup Endpoints ---
-    FACULTY_DEFAULT_USER = os.getenv("FACULTY_USERNAME", "faculty@college.edu")
-    FACULTY_DEFAULT_PASS = os.getenv("FACULTY_PASSWORD", "faculty123")
+    # --- Authentication: one sign-in for admin, faculty and students ---
 
-    @app.route("/api/auth/login", methods=["POST"])
-    def unified_login():
-        data = request.get_json() or {}
-        identifier = str(
-            data.get("login_id", "")
-            or data.get("identifier", "")
-            or data.get("username", "")
-            or data.get("email", "")
-            or data.get("roll_no", "")
-        ).strip()
-        password = str(data.get("password", "")).strip()
+    def client_key(identifier: str) -> str:
+        fwd = request.headers.get("X-Forwarded-For", "")
+        ip = fwd.split(",")[0].strip() if fwd else (request.remote_addr or "?")
+        return f"{ip}|{identifier.lower()}"
 
-        if not identifier:
-            return jsonify({"ok": False, "error": "Email or Student ID is required."}), 400
-
-        # 1. Check Admin
-        valid_admin_emails = {
-            "admin",
-            "admin@college.edu",
-            "admin@attendchain.edu",
-            "chancellor@college.edu",
-            DEFAULT_ADMIN_EMAIL
-        }
-        valid_admin_passwords = {
-            "admin123",
-            "attendchain2026",
-            DEFAULT_ADMIN_PASSWORD,
-            admin_token,
-            DEFAULT_ADMIN_TOKEN
-        }
-        if identifier.lower() in valid_admin_emails:
-            if password in valid_admin_passwords or password == DEFAULT_ADMIN_PASSWORD:
-                admin_obj = {
-                    "name": "Central University Administration",
-                    "email": DEFAULT_ADMIN_EMAIL,
-                    "role": "admin",
-                    "permissions": ["all", "manage_faculty", "manage_groups", "view_audit", "system_settings", "face_resets"]
-                }
-                return jsonify({
-                    "ok": True,
-                    "role": "admin",
-                    "token": admin_token,
-                    "user": admin_obj,
-                    "admin": admin_obj
-                }), 200
-
-        # 2. Check Faculty
-        faculty = app.db.get_faculty_by_email(identifier)
-        if faculty:
-            stored_pass = faculty.get("password_hash", "")
-            if password == stored_pass or password in (FACULTY_DEFAULT_PASS, "admin123", admin_token, DEFAULT_ADMIN_TOKEN):
-                fac_obj = {
-                    "name": faculty["name"],
-                    "email": faculty["email"],
-                    "department": faculty["department"],
-                    "role": "faculty",
-                    "permissions": ["create_group", "take_attendance", "close_session", "export_csv"]
-                }
-                return jsonify({
-                    "ok": True,
-                    "role": "faculty",
-                    "token": admin_token,
-                    "user": fac_obj,
-                    "faculty": fac_obj
-                }), 200
-
-        # Fallback faculty by keyword "faculty"
-        if identifier.lower() in ("faculty", "faculty@college.edu", "faculty@attendchain.edu") and password in (FACULTY_DEFAULT_PASS, "admin123", admin_token, DEFAULT_ADMIN_TOKEN):
-            fac_obj = {
-                "name": "Prof. Dr. Alan Turing",
-                "email": "faculty@college.edu",
-                "department": "Computer Science & Engineering",
-                "role": "faculty",
-                "permissions": ["create_group", "take_attendance", "close_session", "export_csv"]
-            }
-            return jsonify({
-                "ok": True,
-                "role": "faculty",
-                "token": admin_token,
-                "user": fac_obj,
-                "faculty": fac_obj
-            }), 200
-
-        # 3. Check Student (by Email OR Roll No OR Student ID)
-        student = app.db.get_student_by_identifier(identifier)
-        if student:
-            stored_pass = student.get("password_hash") or "student123"
-            if password == stored_pass or password in ("student123", "siddhant", "admin123", admin_token, DEFAULT_ADMIN_TOKEN):
-                joined_groups = app.db.get_groups_for_student(student["student_id"])
-                total_sessions = sum(g.get("total_sessions", 0) for g in joined_groups)
-                attended_sessions = sum(g.get("attended_sessions", 0) for g in joined_groups)
-                pct = (attended_sessions * 100 // total_sessions) if total_sessions > 0 else 100
-                min_threshold = int(os.getenv("MIN_ATTENDANCE_PERCENT", "75"))
-                is_def = (pct < min_threshold) if total_sessions > 0 else False
-                return jsonify({
-                    "ok": True,
-                    "role": "student",
-                    "token": admin_token,
-                    "student": {
-                        "roll_no": student["roll_no"],
-                        "name": student["name"],
-                        "email": student.get("email", ""),
-                        "student_id": student["student_id"],
-                        "face_commitment": student.get("face_commitment", ""),
-                        "face_enrolled": bool(student.get("face_enrolled", 0)),
-                        "face_reset_status": student.get("face_reset_status", "NONE"),
-                        "registered_at": student["registered_at"],
-                        "total_groups": len(joined_groups),
-                        "total_sessions": total_sessions,
-                        "attended_sessions": attended_sessions,
-                        "attendance_percent": pct,
-                        "is_defaulter": is_def
-                    },
-                    "joined_groups": joined_groups
-                }), 200
-
-        return jsonify({"ok": False, "error": "Invalid credentials. Please verify your Email/Student ID and password."}), 401
-
-    @app.route("/api/auth/signup", methods=["POST"])
-    def student_signup():
-        data = request.get_json() or {}
-        name = str(data.get("name", "")).strip()
-        email = str(data.get("email", "")).strip().lower()
-        password = str(data.get("password", "")).strip()
-
-        if not name:
-            return jsonify({"ok": False, "error": "Full Name is required."}), 400
-        if not email or "@" not in email:
-            return jsonify({"ok": False, "error": "A valid University Email is required."}), 400
-        if not password or len(password) < 4:
-            return jsonify({"ok": False, "error": "Password must be at least 4 characters long."}), 400
-
-        # Check existing student or faculty email
-        existing_stu = app.db.get_student_by_identifier(email)
-        if existing_stu:
-            return jsonify({"ok": False, "error": f"An account with email '{email}' already exists. Please sign in."}), 409
-        if app.db.get_faculty_by_email(email):
-            return jsonify({"ok": False, "error": f"Email '{email}' is registered as a faculty account. Please sign in."}), 409
-
-        # Create new student account with auto-allotted roll_no
-        new_student = app.db.create_student(name=name, email=email, password_hash=password)
-
-        joined_groups = app.db.get_groups_for_student(new_student["student_id"])
-
-        return jsonify({
-            "ok": True,
-            "message": f"Account created successfully! Your allotted Student ID is {new_student['roll_no']}.",
-            "role": "student",
-            "token": admin_token,
-            "student": {
-                "roll_no": new_student["roll_no"],
-                "name": new_student["name"],
-                "email": new_student["email"],
-                "student_id": new_student["student_id"],
-                "face_commitment": "",
-                "face_enrolled": False,
-                "face_reset_status": "NONE",
-                "registered_at": new_student["registered_at"],
-                "total_groups": len(joined_groups),
-                "total_sessions": 0,
-                "attended_sessions": 0,
-                "attendance_percent": 100,
-                "is_defaulter": False
-            },
-            "joined_groups": joined_groups
-        }), 201
-
-    @app.route("/api/auth/admin/login", methods=["POST"])
-    def admin_login():
-        data = request.get_json() or {}
-        username = str(data.get("username", "") or data.get("email", "")).strip().lower()
-        password = str(data.get("password", "")).strip()
-        token = str(data.get("token", "")).strip()
-
-        valid_admin_emails = {
-            "admin",
-            "admin@college.edu",
-            "admin@attendchain.edu",
-            "chancellor@college.edu",
-            DEFAULT_ADMIN_EMAIL
-        }
-        valid_admin_passwords = {
-            "admin123",
-            "attendchain2026",
-            DEFAULT_ADMIN_PASSWORD,
-            admin_token,
-            DEFAULT_ADMIN_TOKEN
-        }
-        is_valid_user = (
-            username in valid_admin_emails
-            and (password in valid_admin_passwords or password == DEFAULT_ADMIN_PASSWORD)
-        )
-        is_valid_token = token and (
-            hmac.compare_digest(token, admin_token) or
-            hmac.compare_digest(token, DEFAULT_ADMIN_TOKEN)
-        )
-
-        if is_valid_user or is_valid_token:
-            return jsonify({
-                "ok": True,
-                "role": "admin",
-                "token": admin_token,
-                "user": {
-                    "name": "Central University Administration",
-                    "email": DEFAULT_ADMIN_EMAIL,
-                    "role": "admin",
-                    "permissions": ["all", "manage_faculty", "manage_groups", "view_audit", "system_settings"]
-                }
-            }), 200
-
-    @app.route("/api/students/next-roll", methods=["GET"])
-    def get_next_student_roll():
-        return jsonify({"ok": True, "next_roll_no": app.db.generate_next_student_roll()}), 200
-
-        return jsonify({"ok": False, "error": "Invalid admin credentials. Default is admin@college.edu / admin123."}), 401
-
-    @app.route("/api/auth/faculty/login", methods=["POST"])
-    def faculty_login():
-        data = request.get_json() or {}
-        username = str(data.get("username", "") or data.get("email", "") or data.get("user", "")).strip()
-        password = str(data.get("password", "")).strip()
-        token = str(data.get("token", "")).strip()
-
-        # Check DB faculty first
-        db_faculty = app.db.get_faculty_by_email(username)
-        if db_faculty and (db_faculty["password_hash"] == password or password in (FACULTY_DEFAULT_PASS, "admin123", admin_token, DEFAULT_ADMIN_TOKEN)):
-            return jsonify({
-                "ok": True,
-                "token": admin_token,
-                "role": "faculty",
-                "user": {
-                    "name": db_faculty["name"],
-                    "email": db_faculty["email"],
-                    "department": db_faculty["department"],
-                    "role": "faculty",
-                    "permissions": ["create_group", "take_attendance", "close_session", "export_csv"]
-                }
-            }), 200
-
-        # Allow login via username/password OR direct token fallback
-        is_valid_user = (
-            username.lower() in (FACULTY_DEFAULT_USER.lower(), "faculty", "admin", "faculty@attendchain.edu")
-            and password in (FACULTY_DEFAULT_PASS, "admin123", "attendchain2026", admin_token, DEFAULT_ADMIN_TOKEN)
-        )
-        is_valid_token = (
-            token and (
-                hmac.compare_digest(token, admin_token) or
-                hmac.compare_digest(token, DEFAULT_ADMIN_TOKEN)
-            )
-        )
-
-        if is_valid_user or is_valid_token:
-            return jsonify({
-                "ok": True,
-                "token": admin_token,
-                "role": "faculty",
-                "user": {
-                    "name": "Dr. Alan Turing",
-                    "email": username or FACULTY_DEFAULT_USER,
-                    "department": "Computer Science & Engineering",
-                    "role": "faculty",
-                    "permissions": ["create_group", "take_attendance", "close_session", "export_csv"]
-                }
-            }), 200
-
-        return jsonify({
-            "ok": False,
-            "error": "Invalid faculty credentials. Default is faculty@college.edu / faculty123 (or admin / admin123)."
-        }), 401
-
-    @app.route("/api/auth/student/login", methods=["POST"])
-    def student_login():
-        data = request.get_json() or {}
-        roll_no = str(data.get("roll_no", "") or data.get("roll_number", "") or data.get("student_id", "") or data.get("id", "")).strip().upper()
-
-        if not roll_no:
-            return jsonify({"ok": False, "error": "Student ID / Roll Number is required."}), 400
-
-        student = app.db.get_student_by_roll(roll_no)
-        if not student:
-            return jsonify({
-                "ok": False,
-                "error": f"Student ID '{roll_no}' not found in database. Please register your face first."
-            }), 404
-
-        # Joined groups & attendance summary
+    def student_payload(student: Dict[str, Any]) -> Dict[str, Any]:
         joined_groups = app.db.get_groups_for_student(student["student_id"])
-        total_sessions = sum(g.get("total_sessions", 0) for g in joined_groups)
-        attended_sessions = sum(g.get("attended_sessions", 0) for g in joined_groups)
+        total_sessions = sum(gr.get("total_sessions", 0) for gr in joined_groups)
+        attended_sessions = sum(gr.get("attended_sessions", 0) for gr in joined_groups)
         pct = (attended_sessions * 100 // total_sessions) if total_sessions > 0 else 100
-
         min_threshold = int(os.getenv("MIN_ATTENDANCE_PERCENT", "75"))
-        is_def = (pct < min_threshold) if total_sessions > 0 else False
-
-        return jsonify({
-            "ok": True,
-            "role": "student",
+        return {
             "student": {
                 "roll_no": student["roll_no"],
                 "name": student["name"],
+                "email": student.get("email", ""),
                 "student_id": student["student_id"],
-                "face_commitment": student["face_commitment"],
+                "face_commitment": student.get("face_commitment", ""),
+                "face_enrolled": bool(student.get("face_enrolled", 0)),
+                "face_reset_status": student.get("face_reset_status", "NONE"),
                 "registered_at": student["registered_at"],
                 "total_groups": len(joined_groups),
                 "total_sessions": total_sessions,
                 "attended_sessions": attended_sessions,
                 "attendance_percent": pct,
-                "is_defaulter": is_def
+                "is_defaulter": (pct < min_threshold) if total_sessions > 0 else False
             },
             "joined_groups": joined_groups
-        }), 200
+        }
+
+    def admin_object() -> Dict[str, Any]:
+        return {
+            "name": "Central University Administration",
+            "email": admin_email,
+            "role": "admin",
+            "permissions": ["all", "manage_faculty", "manage_groups", "view_audit", "system_settings", "face_resets"]
+        }
+
+    def faculty_object(faculty: Dict[str, Any]) -> Dict[str, Any]:
+        return {
+            "name": faculty["name"],
+            "email": faculty["email"],
+            "department": faculty.get("department", ""),
+            "role": "faculty",
+            "permissions": ["create_group", "take_attendance", "close_session", "export_csv"]
+        }
+
+    def check_account_password(record: Dict[str, Any], password: str, upgrade) -> Tuple[bool, Optional[str]]:
+        """Verifies a stored password, refuses demo defaults in production, upgrades plaintext to a hash."""
+        stored = record.get("password_hash") or ""
+        if not verify_password(password, stored):
+            return False, None
+        if production and not is_hashed(stored) and stored in DEMO_DEFAULT_PASSWORDS:
+            return False, ("This account still uses the public demo password, which is disabled on the live site. "
+                           "Ask the administrator to set a new password.")
+        if not is_hashed(stored):
+            try:
+                upgrade(hash_password(password))
+            except Exception as e:
+                logger.warning(f"Could not upgrade stored password to a hash: {e}")
+        return True, None
+
+    def authenticate(identifier: str, password: str, allowed_roles=("admin", "faculty", "student")):
+        """Returns (response_json, status)."""
+        if not identifier or not password:
+            return {"ok": False, "error": "Email / Student ID and password are required."}, 400
+
+        key = client_key(identifier)
+        if app.login_limiter.is_blocked(key):
+            return {"ok": False, "error": "Too many failed sign-in attempts. Please wait 15 minutes and try again."}, 429
+
+        # 1. Central admin (credentials from ADMIN_EMAIL / ADMIN_PASSWORD)
+        if "admin" in allowed_roles and identifier.lower() in (admin_email, "admin") and admin_password:
+            if constant_time_equals(password, admin_password):
+                app.login_limiter.reset(key)
+                adm = admin_object()
+                return {
+                    "ok": True, "role": "admin",
+                    "token": app.tokens.issue("admin", admin_email, adm["name"]),
+                    "user": adm, "admin": adm
+                }, 200
+
+        # 2. Faculty
+        if "faculty" in allowed_roles:
+            faculty = app.db.get_faculty_by_email(identifier)
+            if faculty:
+                ok, refusal = check_account_password(
+                    faculty, password, lambda h: app.db.update_faculty_password(faculty["email"], h))
+                if refusal:
+                    return {"ok": False, "error": refusal}, 403
+                if ok:
+                    app.login_limiter.reset(key)
+                    fac = faculty_object(faculty)
+                    return {
+                        "ok": True, "role": "faculty",
+                        "token": app.tokens.issue("faculty", faculty["email"].lower(), faculty["name"]),
+                        "user": fac, "faculty": fac
+                    }, 200
+
+        # 3. Student (email, roll number or student id)
+        if "student" in allowed_roles:
+            student = app.db.get_student_by_identifier(identifier)
+            if student:
+                ok, refusal = check_account_password(
+                    student, password, lambda h: app.db.update_student_password(student["roll_no"], h))
+                if refusal:
+                    return {"ok": False, "error": refusal}, 403
+                if ok:
+                    app.login_limiter.reset(key)
+                    body = {"ok": True, "role": "student",
+                            "token": app.tokens.issue("student", student["roll_no"].upper(), student["name"])}
+                    body.update(student_payload(student))
+                    return body, 200
+
+        app.login_limiter.record_failure(key)
+        return {"ok": False, "error": "Invalid credentials. Please verify your Email/Student ID and password."}, 401
+
+    def login_fields(data: Dict[str, Any]) -> Tuple[str, str]:
+        identifier = str(
+            data.get("login_id", "") or data.get("identifier", "") or data.get("username", "")
+            or data.get("email", "") or data.get("roll_no", "") or data.get("user", "")
+        ).strip()
+        return identifier, str(data.get("password", "")).strip()
+
+    @app.route("/api/auth/login", methods=["POST"])
+    def unified_login():
+        body, status = authenticate(*login_fields(request.get_json(silent=True) or {}))
+        return jsonify(body), status
+
+    # Role-specific sign-in endpoints (kept for API clients); same checks as /api/auth/login
+    @app.route("/api/auth/admin/login", methods=["POST"])
+    def admin_login():
+        body, status = authenticate(*login_fields(request.get_json(silent=True) or {}), allowed_roles=("admin",))
+        return jsonify(body), status
+
+    @app.route("/api/auth/faculty/login", methods=["POST"])
+    def faculty_login():
+        body, status = authenticate(*login_fields(request.get_json(silent=True) or {}), allowed_roles=("faculty",))
+        return jsonify(body), status
+
+    @app.route("/api/auth/student/login", methods=["POST"])
+    def student_login():
+        body, status = authenticate(*login_fields(request.get_json(silent=True) or {}), allowed_roles=("student",))
+        return jsonify(body), status
+
+    @app.route("/api/auth/me", methods=["GET"])
+    def auth_me():
+        who = ident()
+        if not who:
+            return jsonify({"ok": False, "error": "Not signed in."}), 401
+        return jsonify({"ok": True, "role": who["role"], "id": who["sub"], "name": who.get("name", "")}), 200
+
+    @app.route("/api/auth/signup", methods=["POST"])
+    def student_signup():
+        data = request.get_json(silent=True) or {}
+        name = str(data.get("name", "")).strip()
+        email = str(data.get("email", "")).strip().lower()
+        password = str(data.get("password", "")).strip()
+        min_len = 8 if production else 4
+
+        if not name:
+            return jsonify({"ok": False, "error": "Full Name is required."}), 400
+        if not email or "@" not in email:
+            return jsonify({"ok": False, "error": "A valid University Email is required."}), 400
+        if len(password) < min_len:
+            return jsonify({"ok": False, "error": f"Password must be at least {min_len} characters long."}), 400
+        if email in (admin_email,):
+            return jsonify({"ok": False, "error": "This email is reserved."}), 409
+
+        if app.db.get_student_by_identifier(email):
+            return jsonify({"ok": False, "error": f"An account with email '{email}' already exists. Please sign in."}), 409
+        if app.db.get_faculty_by_email(email):
+            return jsonify({"ok": False, "error": f"Email '{email}' is registered as a faculty account. Please sign in."}), 409
+
+        new_student = app.db.create_student(name=name, email=email, password_hash=hash_password(password))
+        body = {
+            "ok": True,
+            "message": f"Account created successfully! Your allotted Student ID is {new_student['roll_no']}.",
+            "role": "student",
+            "token": app.tokens.issue("student", new_student["roll_no"].upper(), new_student["name"]),
+        }
+        body.update(student_payload(new_student))
+        return jsonify(body), 201
+
+    @app.route("/api/students/next-roll", methods=["GET"])
+    def get_next_student_roll():
+        return jsonify({"ok": True, "next_roll_no": app.db.generate_next_student_roll()}), 200
 
     # --- Organization Admin APIs ---
 
@@ -495,16 +542,23 @@ def create_app(chain_adapter=None, face_engine=None, db=None, auto_init_session:
         data = request.get_json() or {}
         name = str(data.get("name", "")).strip()
         email = str(data.get("email", "")).strip().lower()
-        password = str(data.get("password", "")).strip() or "faculty123"
+        password = str(data.get("password", "")).strip()
         department = str(data.get("department", "")).strip() or "Computer Science & Engineering"
 
         if not name or not email:
             return jsonify({"error": "Faculty name and institutional email are required."}), 400
+        if not password:
+            if production:
+                return jsonify({"error": "Set an initial password (at least 8 characters) for the new faculty account."}), 400
+            password = "faculty123"  # development demo default
+        elif production and (len(password) < 8 or password in DEMO_DEFAULT_PASSWORDS):
+            return jsonify({"error": "Faculty password must be at least 8 characters and not a demo password."}), 400
 
         if app.db.get_faculty_by_email(email):
             return jsonify({"error": f"Faculty with email '{email}' already registered."}), 409
 
-        fac = app.db.add_faculty(name, email, password, department)
+        fac = app.db.add_faculty(name, email, hash_password(password), department)
+        fac = {k: v for k, v in dict(fac).items() if k != "password_hash"}
         return jsonify({"ok": True, "message": f"Faculty {name} created successfully.", "faculty": fac}), 201
 
     @app.route("/api/admin/groups", methods=["GET"])
@@ -517,7 +571,11 @@ def create_app(chain_adapter=None, face_engine=None, db=None, auto_init_session:
 
     @app.route("/api/faculty/groups", methods=["GET"])
     def faculty_get_groups():
-        email = request.args.get("email", "").strip().lower() or "faculty@college.edu"
+        who = ident()
+        if who and who["role"] == "faculty":
+            email = who["sub"].lower()  # faculty only ever see their own courses
+        else:
+            email = request.args.get("email", "").strip().lower() or "faculty@college.edu"
         groups = app.db.get_groups_by_faculty(email)
         return jsonify({"groups": groups}), 200
 
@@ -528,6 +586,9 @@ def create_app(chain_adapter=None, face_engine=None, db=None, auto_init_session:
         subject_code = str(data.get("subject_code", "")).strip().upper()
         department = str(data.get("department", "")).strip() or "Computer Science"
         faculty_email = str(data.get("faculty_email", "faculty@college.edu")).strip().lower()
+        who = ident()
+        if who and who["role"] == "faculty":
+            faculty_email = who["sub"].lower()  # a faculty member creates courses for themselves
 
         if not name or not subject_code:
             return jsonify({"error": "Subject title and course code are required."}), 400
@@ -549,6 +610,8 @@ def create_app(chain_adapter=None, face_engine=None, db=None, auto_init_session:
         group = app.db.get_group_by_id(group_id)
         if not group:
             return jsonify({"error": f"Group #{group_id} not found."}), 404
+        if not faculty_may_manage_group(group):
+            return auth_error(403, "You can only manage your own courses.")
 
         students = app.db.get_students_in_group(group_id)
         return jsonify({
@@ -562,10 +625,17 @@ def create_app(chain_adapter=None, face_engine=None, db=None, auto_init_session:
         group = app.db.get_group_by_id(group_id)
         if not group:
             return jsonify({"error": f"Group #{group_id} not found."}), 404
+        if not faculty_may_manage_group(group):
+            return auth_error(403, "You can only manage your own courses.")
 
         data = request.get_json() or {}
-        duration_minutes = int(data.get("duration_minutes", 60))
-        duration_seconds = max(60, min(86400, duration_minutes * 60))
+        try:
+            duration_minutes = int(data.get("duration_minutes", 60))
+        except (ValueError, TypeError):
+            return jsonify({"ok": False, "error": "duration_minutes must be a whole number."}), 400
+        # The smart contract only accepts sessions between 60 seconds and 12 hours (43200 s)
+        duration_minutes = max(1, min(720, duration_minutes))
+        duration_seconds = duration_minutes * 60
 
         now_ts = int(time.time())
 
@@ -584,7 +654,11 @@ def create_app(chain_adapter=None, face_engine=None, db=None, auto_init_session:
 
         # Open new session on blockchain
         subject = group["subject_code"]
-        new_session_id, tx_hash = app.chain.open_session(subject, duration_seconds)
+        try:
+            new_session_id, tx_hash = app.chain.open_session(subject, duration_seconds)
+        except Exception as e:
+            logger.error(f"Failed to open session on-chain: {e}")
+            return jsonify({"ok": False, "error": f"Failed to open session on-chain: {str(e)}"}), 502
 
         start_time = now_ts
         end_time = start_time + duration_seconds
@@ -624,6 +698,8 @@ def create_app(chain_adapter=None, face_engine=None, db=None, auto_init_session:
         group = app.db.get_group_by_id(group_id)
         if not group:
             return jsonify({"error": f"Group #{group_id} not found."}), 404
+        if not faculty_may_manage_group(group):
+            return auth_error(403, "You can only manage your own courses.")
 
         now_ts = int(time.time())
         active_sess = None
@@ -658,6 +734,8 @@ def create_app(chain_adapter=None, face_engine=None, db=None, auto_init_session:
         group = app.db.get_group_by_id(group_id)
         if not group:
             return jsonify({"error": f"Group #{group_id} not found."}), 404
+        if not faculty_may_manage_group(group):
+            return auth_error(403, "You can only manage your own courses.")
 
         now_ts = int(time.time())
         active_sess = None
@@ -753,6 +831,9 @@ def create_app(chain_adapter=None, face_engine=None, db=None, auto_init_session:
         roll_no = str(data.get("roll_no", "")).strip().upper()
         invite_code = str(data.get("invite_code", "")).strip().upper()
 
+        who = ident()
+        if who and who["role"] == "student":
+            roll_no = who["sub"].upper()  # students can only enrol themselves
         if not roll_no:
             return jsonify({"ok": False, "error": "Roll Number is required."}), 400
         if not invite_code:
@@ -914,14 +995,15 @@ def create_app(chain_adapter=None, face_engine=None, db=None, auto_init_session:
         old_password = str(data.get("old_password", "")).strip()
         new_password = str(data.get("new_password", "")).strip()
 
-        if not new_password or len(new_password) < 4:
-            return jsonify({"ok": False, "error": "New password must be at least 4 characters long."}), 400
+        min_len = 8 if production else 4
+        if not new_password or len(new_password) < min_len:
+            return jsonify({"ok": False, "error": f"New password must be at least {min_len} characters long."}), 400
 
-        current_hash = student.get("password_hash") or "student123"
-        if old_password != current_hash and old_password not in ("student123", "admin123", admin_token):
+        who = ident()
+        if not (who and who["role"] == "admin") and not verify_password(old_password, student.get("password_hash") or ""):
             return jsonify({"ok": False, "error": "Current password is incorrect."}), 401
 
-        app.db.update_student_password(roll_no, new_password)
+        app.db.update_student_password(roll_no, hash_password(new_password))
         return jsonify({"ok": True, "message": "Password changed successfully."}), 200
 
     # --- Admin Face Reset Approval APIs ---
@@ -968,8 +1050,21 @@ def create_app(chain_adapter=None, face_engine=None, db=None, auto_init_session:
             "wallet_balance_hbar": health_info.get("wallet_balance_hbar"),
             "models_ready": models_ready,
             "engine_type": app.face_engine.__class__.__name__,
-            "student_count": len(students)
+            "student_count": len(students),
+            "geofence_enabled": app.geofence.enabled,
+            # The sign-in page only shows its demo shortcut buttons on development servers
+            "demo_logins": not production
         }), 200
+
+    @app.route("/api/healthz", methods=["GET"])
+    def healthz():
+        """Lightweight liveness probe for the hosting platform (no blockchain/database calls)."""
+        return jsonify({"ok": True}), 200
+
+    @app.route("/api/campus/geofence", methods=["GET"])
+    def get_campus_geofence():
+        """Campus centre and allowed radius, used by the attendance screen to draw the map."""
+        return jsonify({"ok": True, "geofence": app.geofence.public_info()}), 200
 
     @app.route("/api/face/track", methods=["POST"])
     def track_face_preview():
@@ -1062,8 +1157,8 @@ def create_app(chain_adapter=None, face_engine=None, db=None, auto_init_session:
 
     @app.route("/api/students", methods=["GET"])
     def list_students():
-        if not verify_admin_auth():
-            return jsonify({"error": "Unauthorized: Invalid or missing X-Admin-Token"}), 401
+        if not verify_staff_auth():
+            return auth_error(403, "Faculty or admin sign-in required.")
 
         students = app.db.get_all_students()
         return jsonify({"students": students}), 200
@@ -1071,14 +1166,12 @@ def create_app(chain_adapter=None, face_engine=None, db=None, auto_init_session:
     @app.route("/api/students", methods=["POST"])
     @app.route("/api/students/register", methods=["POST"])
     def enroll_student():
-        token = request.headers.get("X-Admin-Token", "")
-        # If token provided and invalid, reject; allow registration from web portal
-        if token and not verify_admin_auth():
-            return jsonify({"error": "Unauthorized: Invalid or missing X-Admin-Token"}), 401
+        if not verify_staff_auth():
+            return auth_error(403, "Faculty or admin sign-in required.")
 
         data = request.get_json() or {}
-        roll_no = data.get("roll_no", "").strip()
-        name = data.get("name", "").strip()
+        roll_no = str(data.get("roll_no", "") or "").strip()
+        name = str(data.get("name", "") or "").strip()
         frames_b64 = data.get("frames", [])
 
         if not roll_no or not name:
@@ -1124,12 +1217,6 @@ def create_app(chain_adapter=None, face_engine=None, db=None, auto_init_session:
         student["tx_hash"] = tx_hash
         student["explorer_url"] = app.chain.get_explorer_tx_url(tx_hash)
 
-        # Auto-enroll in default Course Group 1 (CS301)
-        try:
-            app.db.enroll_student_in_group(1, student["student_id"], student["roll_no"])
-        except Exception:
-            pass
-
         return jsonify({
             "message": "Student successfully enrolled and registered on-chain.",
             "student": student
@@ -1137,11 +1224,11 @@ def create_app(chain_adapter=None, face_engine=None, db=None, auto_init_session:
 
     @app.route("/api/sessions", methods=["POST"])
     def open_session():
-        if not verify_admin_auth():
-            return jsonify({"error": "Unauthorized: Invalid or missing X-Admin-Token"}), 401
+        if not verify_staff_auth():
+            return auth_error(403, "Faculty or admin sign-in required.")
 
         data = request.get_json() or {}
-        subject = data.get("subject", "").strip().upper()
+        subject = str(data.get("subject", "") or "").strip().upper()
         duration_seconds = data.get("duration_seconds", 3600)
         group_id = data.get("group_id", 0)
         try:
@@ -1156,7 +1243,7 @@ def create_app(chain_adapter=None, face_engine=None, db=None, auto_init_session:
             duration_seconds = int(duration_seconds)
             if duration_seconds < 60 or duration_seconds > 43200:
                 return jsonify({"error": "duration_seconds must be between 60 (1 min) and 43200 (12 hours)."}), 400
-        except ValueError:
+        except (ValueError, TypeError):
             return jsonify({"error": "duration_seconds must be an integer."}), 400
 
         try:
@@ -1196,8 +1283,8 @@ def create_app(chain_adapter=None, face_engine=None, db=None, auto_init_session:
 
     @app.route("/api/sessions/<int:session_id>/close", methods=["POST"])
     def close_session(session_id: int):
-        if not verify_admin_auth():
-            return jsonify({"error": "Unauthorized: Invalid or missing X-Admin-Token"}), 401
+        if not verify_staff_auth():
+            return auth_error(403, "Faculty or admin sign-in required.")
 
         try:
             tx_hash = app.chain.close_session(session_id)
@@ -1238,7 +1325,7 @@ def create_app(chain_adapter=None, face_engine=None, db=None, auto_init_session:
 
         try:
             session_id = int(session_id)
-        except ValueError:
+        except (ValueError, TypeError):
             return jsonify({"verdict": "invalid_session", "error": "session_id must be integer."}), 404
 
         # Pre-check session validity and active status: check both DB and chain
@@ -1255,6 +1342,19 @@ def create_app(chain_adapter=None, face_engine=None, db=None, auto_init_session:
                 "verdict": "session_inactive",
                 "error": f"Session #{session_id} has closed or expired. Please ask your faculty to take attendance."
             }), 400
+
+        # Campus geofence: reject before any face analysis if the device is off campus
+        geo = app.geofence.check(data.get("location"))
+        if not geo["ok"]:
+            logger.info(f"Attendance rejected for session #{session_id}: {geo['verdict']} "
+                        f"(distance={geo.get('distance_m')} m, accuracy={geo.get('accuracy_m')} m)")
+            return jsonify({
+                "verdict": geo["verdict"],
+                "error": geo["error"],
+                "distance_m": geo.get("distance_m"),
+                "radius_m": geo.get("radius_m"),
+                "accuracy_m": geo.get("accuracy_m")
+            }), geo["status"]
 
         # Retrieve enrolled templates
         enrolled = app.db.get_all_embeddings()
@@ -1294,6 +1394,14 @@ def create_app(chain_adapter=None, face_engine=None, db=None, auto_init_session:
         student_id = matched_student["student_id"]
         roll_no = matched_student["roll_no"]
         name = matched_student["name"]
+
+        who = ident()
+        if who and who["role"] == "student" and str(roll_no).upper() != who["sub"].upper():
+            logger.warning(f"Attendance blocked: signed in as {who['sub']} but face matched {roll_no} (session #{session_id})")
+            return jsonify({
+                "verdict": "identity_mismatch",
+                "error": "The face scanned does not match the signed-in student. You can only mark your own attendance."
+            }), 403
         match_score = analysis["match_score"]
         blink_count = analysis["blink_count"]
         frames_analyzed = analysis["total_frames"]
@@ -1368,7 +1476,8 @@ def create_app(chain_adapter=None, face_engine=None, db=None, auto_init_session:
                 "evidence_hash": evidence_hash,
                 "tx_hash": tx_hash,
                 "explorer_url": app.chain.get_explorer_tx_url(tx_hash),
-                "timestamp": now_ts
+                "timestamp": now_ts,
+                "distance_m": geo.get("distance_m")
             }
         }), 200
 
@@ -1420,8 +1529,8 @@ def create_app(chain_adapter=None, face_engine=None, db=None, auto_init_session:
 
     @app.route("/api/sessions/<int:session_id>/attendance", methods=["GET"])
     def get_session_attendance(session_id: int):
-        if not verify_admin_auth():
-            return jsonify({"error": "Unauthorized: Invalid or missing X-Admin-Token"}), 401
+        if not verify_staff_auth():
+            return auth_error(403, "Faculty or admin sign-in required.")
 
         session = app.db.get_session(session_id)
         if not session:
@@ -1442,8 +1551,8 @@ def create_app(chain_adapter=None, face_engine=None, db=None, auto_init_session:
 
     @app.route("/api/sessions/<int:session_id>/attendance.csv", methods=["GET"])
     def export_session_attendance_csv(session_id: int):
-        if not verify_admin_auth():
-            return jsonify({"error": "Unauthorized: Invalid or missing X-Admin-Token"}), 401
+        if not verify_staff_auth():
+            return auth_error(403, "Faculty or admin sign-in required.")
 
         session = app.db.get_session(session_id)
         if not session:
@@ -1491,8 +1600,8 @@ def create_app(chain_adapter=None, face_engine=None, db=None, auto_init_session:
         (c) Compares on-chain presentCount with local row count for each session.
         Returns all discrepancies.
         """
-        if not verify_admin_auth():
-            return jsonify({"error": "Unauthorized: Invalid or missing X-Admin-Token"}), 401
+        if not verify_staff_auth():
+            return auth_error(403, "Faculty or admin sign-in required.")
 
         discrepancies = []
         checks_performed = 0
@@ -1650,5 +1759,5 @@ if __name__ == "__main__":
     host = os.getenv("HOST", "0.0.0.0")
     port = int(os.getenv("PORT", 5000))
     logger.info(f"Starting AttendChain server on {host}:{port}...")
-    app.run(host=host, port=port, debug=False)
+    app.run(host=host, port=port, debug=False, threaded=True)
 

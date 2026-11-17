@@ -152,6 +152,14 @@ node scripts/check_hedera.js
 
 ---
 
+### 4.4 Deploying Online (Vercel + Render)
+
+The repository is deployment-ready: `Dockerfile` + `render.yaml` run the backend on Render,
+`vercel.json` serves the web app on Vercel and forwards `/api/*` to Render.
+Follow **[DEPLOYMENT.md](DEPLOYMENT.md)** for the step-by-step guide and the list of environment variables.
+
+---
+
 ## 5. Running Tests
 
 ### 5.1 Smart Contract Hardhat Tests (Local EVM)
@@ -236,6 +244,19 @@ Follow this sequence for an impressive, flawless viva presentation:
 | `Blink Open Threshold` | `liveness.py` | `0.35` | MediaPipe blendshape mean closure score to consider eyes open. |
 | `Max Blink Duration` | `liveness.py` | `8` frames | Maximum frames eyes can remain closed for a valid blink (prevents sleeping/photo). |
 
+### 8.1 Campus Geofence (Location-Restricted Attendance)
+
+Students can only mark attendance when their device is within `CAMPUS_RADIUS_METERS` (default **150 m**) of the campus point. The attendance screen shows a map with the campus zone and the student's position and keeps **Mark Attendance Now** disabled while they are outside it. The server repeats the check on every `/api/attendance/mark` request, so calling the API directly from off campus is rejected too.
+
+| Parameter | Default | Description |
+|---|---|---|
+| `GEOFENCE_ENABLED` | `true` | Set `false` to accept attendance from anywhere (e.g. for a classroom demo off campus). |
+| `CAMPUS_LATITUDE` / `CAMPUS_LONGITUDE` | `19.0458788` / `72.8892847` | Campus centre (VESIT, Chembur). |
+| `CAMPUS_RADIUS_METERS` | `150` | Allowed distance from the campus centre. |
+| `GEOFENCE_MAX_ACCURACY_METERS` | `100` | Location fixes less precise than this are rejected. |
+
+Rejections return `outside_campus` (403), `location_required` (400) or `location_inaccurate` (422). Browsers only share location on `https://` pages or `http://localhost`, the same rule as the webcam.
+
 ---
 
 ## 9. Troubleshooting Guide
@@ -246,6 +267,8 @@ Follow this sequence for an impressive, flawless viva presentation:
 | **YuNet / SFace Not Found** | Model files not downloaded | Run `python scripts/download_models.py`. If network is blocked, download URLs manually into `backend/models/`. |
 | **Insufficient HBAR / Out of Gas** | Hedera testnet wallet has 0 balance | Visit [portal.hedera.com](https://portal.hedera.com/) and request testnet HBAR to your ECDSA account. |
 | **Relay Rate Limit / HTTP 429** | Free Hashio public relay throttled | Wait 5 seconds; `Web3ChainAdapter` automatically retries with exponential backoff. |
+| **"Outside Campus Area" while on campus** | Weak GPS / Wi-Fi location fix | Turn on precise location / GPS, move near a window, press **Re-check location**. If needed, raise `CAMPUS_RADIUS_METERS` or `GEOFENCE_MAX_ACCURACY_METERS`. |
+| **"Location Required"** | Browser location permission blocked, or page not on https/localhost | Allow location for the site (lock icon in address bar) and open the portal on `https://` or `http://localhost`. |
 | **Session Expired Error** | Wall-clock time exceeded duration | Open a new session from the Faculty & Admin tab with 10 or 30 minutes duration. |
 
 ---

@@ -1,0 +1,36 @@
+# Secrets never go into the image: set them in the hosting dashboard instead
+.env
+.env.*
+!.env.example
+
+# Local environments, caches and data
+.git
+.venv
+venv
+env
+node_modules
+__pycache__
+*.pyc
+.pytest_cache
+backend/data
+*.db
+*.sqlite
+*.sqlite3
+*.log
+
+# Models are downloaded during the build
+backend/models
+
+# Not needed by the API server
+artifacts
+cache
+test
+contracts
+docs
+brand-identity
+deployments/localhost.json
+hardhat.config.js
+package.json
+package-lock.json
+AUDIT_REPORT.md
+.vercel

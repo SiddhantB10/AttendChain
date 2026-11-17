@@ -1,0 +1,17 @@
+# Exact versions used by the production Docker image (Render).
+# Verified together on Python 3.11: AI models load, web3 adapter, MongoDB adapter, full test suite.
+# For local development you can keep using requirements.txt.
+flask==3.1.3
+flask-cors==6.0.5
+werkzeug==3.1.9
+itsdangerous==2.2.0
+gunicorn==27.0.1
+python-dotenv==1.2.4
+requests==2.34.2
+numpy==2.4.6
+opencv-python==5.0.0.93
+opencv-contrib-python==5.0.0.93
+mediapipe==1.2.3
+web3==8.0.0
+pymongo==4.20.0
+dnspython==2.9.2
